@@ -1,0 +1,118 @@
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import Literal
+
+app = FastAPI(title="Synthetic OR EMR API")
+
+CASES = {
+    "CASE-1042": {
+        "case_id": "CASE-1042",
+        "patient_id": "SYN-PAT-8842",
+        "procedure": "synthetic laparoscopic biopsy",
+        "phase": "pre_op_setup",
+        "priority": "normal",
+        "required_items": [
+            "scalpel",
+            "forceps",
+            "trocar",
+            "suction_tip",
+            "specimen_cup"
+        ],
+        "open_items": [
+            "porter_not_released",
+            "pathology_handoff_task_not_created"
+        ],
+        "porter_release_allowed": False
+    },
+    "CASE-2001": {
+        "case_id": "CASE-2001",
+        "patient_id": "SYN-PAT-2001",
+        "procedure": "synthetic open conversion preparedness pathway",
+        "phase": "procedure_changed_after_setup",
+        "priority": "high",
+        "required_items": [
+            "scalpel",
+            "forceps",
+            "open_retractor",
+            "additional_clamps",
+            "suction_tip",
+            "specimen_cup"
+        ],
+        "open_items": [
+            "updated_setup_not_confirmed",
+            "porter_not_released"
+        ],
+        "porter_release_allowed": False
+    },
+    "CASE-3001": {
+        "case_id": "CASE-3001",
+        "patient_id": "SYN-PAT-3001",
+        "procedure": "synthetic biopsy",
+        "phase": "case_closing_candidate",
+        "priority": "normal",
+        "required_items": [
+            "specimen_cup"
+        ],
+        "open_items": [
+            "pathology_handoff_task_not_created"
+        ],
+        "expected_specimen": True,
+        "specimen_destination": "synthetic_pathology"
+    }
+}
+
+TASKS = []
+
+
+class TaskCreate(BaseModel):
+    case_id: str
+    task_type: Literal[
+        "missing_supply",
+        "human_review",
+        "porter_hold",
+        "porter_release",
+        "specimen_handoff",
+        "wrong_case_cart",
+        "procedure_change_review"
+    ]
+    priority: Literal["low", "normal", "high"]
+    summary: str
+    reason: str
+
+
+@app.get("/cases/{case_id}")
+def get_case(case_id: str):
+    case = CASES.get(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail=f"Unknown case_id {case_id}")
+    return case
+
+
+@app.get("/cases/{case_id}/setup-requirements")
+def get_setup_requirements(case_id: str):
+    case = CASES.get(case_id)
+    if not case:
+        raise HTTPException(status_code=404, detail=f"Unknown case_id {case_id}")
+    return {
+        "case_id": case_id,
+        "procedure": case["procedure"],
+        "phase": case["phase"],
+        "priority": case["priority"],
+        "required_items": case["required_items"],
+        "open_items": case["open_items"],
+        "porter_release_allowed": case.get("porter_release_allowed", False)
+    }
+
+
+@app.post("/tasks")
+def create_task(task: TaskCreate):
+    record = task.model_dump()
+    record["task_id"] = f"TASK-{len(TASKS) + 1:04d}"
+    record["status"] = "created"
+    TASKS.append(record)
+    return record
+
+
+@app.get("/tasks")
+def list_tasks():
+    return {"tasks": TASKS}

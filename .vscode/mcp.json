@@ -1,0 +1,18 @@
+{
+  "servers": {
+    "synthetic-emr": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "${workspaceFolder}/mcp_servers/synthetic_emr_mcp.py"
+      ]
+    },
+    "or-logistics": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "${workspaceFolder}/mcp_servers/or_logistics_mcp.py"
+      ]
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "event_id": "evt-0001",
+  "room_id": "OR-2",
+  "case_id": "CASE-1042",
+  "event_type": "or_setup_state_change",
+  "visible_items": [
+    "scalpel",
+    "forceps",
+    "trocar",
+    "specimen_cup"
+  ],
+  "missing_or_uncertain": [
+    "suction_tip"
+  ],
+  "zone": "back_table",
+  "confidence": 0.88,
+  "timestamp": "2026-05-11T12:00:00+02:00"
+}
