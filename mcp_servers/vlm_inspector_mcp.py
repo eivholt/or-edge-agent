@@ -12,7 +12,9 @@ logfire.instrument_httpx()
 mcp = FastMCP("vlm-inspector")
 
 VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8001/v1")
-VLM_MODEL = os.getenv("VLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
+# VLM_MODEL = os.getenv("VLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
+# VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512")
+VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512-BF16")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "local-dev-key")
 
 DATA_DIR = Path(__file__).resolve().parent.parent / "data"

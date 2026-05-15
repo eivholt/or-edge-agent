@@ -21,7 +21,9 @@ logfire.instrument_pydantic_ai()
 logfire.instrument_httpx()
 
 VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8001/v1")
-VLM_MODEL = os.getenv("VLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+# VLM_MODEL = os.getenv("VLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+# VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512")
+VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512-BF16")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "local-dev-key")
 
 EMR_BASE_URL = "http://localhost:9000"
