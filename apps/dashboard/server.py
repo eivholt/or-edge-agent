@@ -253,7 +253,7 @@ def _run_pipeline(scenario_path: str):
         "human_runner": {"available": True, "eta_seconds": 420},
         "porter": {"available": True, "eta_seconds": 300},
     }
-    _emit("resources", detail="Robot: ✓ 180s · Runner: ✓ 420s · Porter: ✓ 300s")
+    _emit("resources", detail="Robot: 180s | Runner: 420s | Porter: 300s")
 
     # 5. Agent decision (import inline to avoid circular / heavy load)
     _emit("agent", status="thinking", detail="LLM processing…")
@@ -288,17 +288,20 @@ def _run_pipeline(scenario_path: str):
             _emit("spd",
                   item_name=args.get("item_name"),
                   urgency=args.get("urgency"),
-                  detail=f"{'🤖 Robot' if 'robot' in name else '🏃 Runner'}: {args.get('item_name')}")
-        elif name in ("inspect_scene_local", "inspect_scene_remote"):
-            vlm_type = "local" if name == "inspect_scene_local" else "remote (gpt-4o)"
-            _emit("vlm",
+                  detail=f"{'Robot' if 'robot' in name else 'Runner'}: {args.get('item_name')}")
+        elif name == "inspect_scene_local":
+            _emit("vlm_local",
                   answer=args.get("question", ""),
                   image_url=image_url,
-                  vlm_type=vlm_type,
-                  detail=f"VLM [{vlm_type}]: {args.get('question', '')[:80]}")
+                  detail=f"Local VLM (Ministral 3B): {args.get('question', '')[:80]}")
+        elif name == "inspect_scene_remote":
+            _emit("vlm_remote",
+                  answer=args.get("question", ""),
+                  image_url=image_url,
+                  detail=f"Remote VLM (GPT-4o): {args.get('question', '')[:80]}")
 
     # 7. Validation
     errors = validate_decision(decision, event)
     _emit("validation",
           errors=errors,
-          detail=f"{'✓ Passed' if not errors else f'⚠ {len(errors)} error(s): ' + '; '.join(errors)}")
+          detail=f"{'Passed' if not errors else f'{len(errors)} error(s): ' + '; '.join(errors)}")

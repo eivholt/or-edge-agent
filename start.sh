@@ -40,6 +40,22 @@ port_busy() { fuser "$1/tcp" >/dev/null 2>&1; }
 kill_port() {
     if port_busy "$1"; then
         warn "Killing process on port $1"
+        # Get the PID and kill the whole process group so child workers die too
+        local pid
+        pid=$(fuser "$1/tcp" 2>/dev/null | awk '{print $1}')
+        if [[ -n "${pid:-}" ]]; then
+            local pgid
+            pgid=$(ps -o pgid= -p "$pid" 2>/dev/null | tr -d ' ')
+            if [[ -n "${pgid:-}" && "$pgid" != "1" ]]; then
+                kill -- -"$pgid" 2>/dev/null || true
+                sleep 1
+                kill -9 -- -"$pgid" 2>/dev/null || true
+            else
+                kill "$pid" 2>/dev/null || true
+                sleep 1
+                kill -9 "$pid" 2>/dev/null || true
+            fi
+        fi
         fuser -k "$1/tcp" >/dev/null 2>&1 || true
         sleep 1
     fi
@@ -86,7 +102,7 @@ start_llm() {
         --port "$VLLM_PORT" \
         --dtype auto \
         --max-model-len 4096 \
-        --gpu-memory-utilization 0.70 \
+        --gpu-memory-utilization 0.48 \
         --enable-auto-tool-choice \
         --tool-call-parser mistral \
         > "${LOG_DIR}/vllm.log" 2>&1 &
@@ -138,6 +154,13 @@ stop_all() {
     for port in "$VLLM_PORT" "$EMR_PORT" "$DASH_PORT"; do
         kill_port "$port"
     done
+    # vLLM spawns child processes (EngineCore, resource trackers) that don't hold the port
+    if pgrep -f ".venv-vllm/bin/python" >/dev/null 2>&1; then
+        warn "Killing remaining vLLM processes"
+        pkill -f ".venv-vllm/bin/python" 2>/dev/null || true
+        sleep 1
+        pkill -9 -f ".venv-vllm/bin/python" 2>/dev/null || true
+    fi
     ok "All services stopped"
 }
 
