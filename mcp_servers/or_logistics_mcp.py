@@ -84,6 +84,36 @@ def set_or_prep_light(room_id: str, color: str, duration_seconds: int) -> dict:
 
 
 @mcp.tool()
+def reconcile_setup(
+    missing_or_uncertain: list[str],
+    required_items: list[str],
+    visible_items: list[str],
+) -> dict:
+    """
+    Compare detected items against the surgical pathway's required items.
+
+    Returns which required items are missing and which are unaccounted for.
+    Use this BEFORE deciding whether to create tasks or request resupply.
+
+    - actionable_missing: items flagged missing by the detector AND required.
+    - unaccounted: items required but neither visible nor flagged.
+    - all_present: true if every required item is visible.
+    """
+    required = set(required_items)
+    visible = set(visible_items)
+    missing = set(missing_or_uncertain)
+
+    actionable_missing = sorted(missing & required)
+    unaccounted = sorted(required - visible - missing)
+
+    return {
+        "actionable_missing": actionable_missing,
+        "unaccounted": unaccounted,
+        "all_present": len(actionable_missing) == 0 and len(unaccounted) == 0,
+    }
+
+
+@mcp.tool()
 def request_spd_robot_delivery(item_name: str, destination_room: str, urgency: str) -> dict:
     """
     Request delivery of a sterile supply or instrument set by indoor robot.

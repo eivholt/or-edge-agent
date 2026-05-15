@@ -1,6 +1,7 @@
 ALLOWED_TOOLS = {
     "create_synthetic_or_task",
     "request_spd_resupply",
+    "request_spd_robot_delivery",
     "set_or_prep_light",
     "inspect_scene"
 }
@@ -56,6 +57,12 @@ def validate_decision(decision: dict, event: dict) -> list[str]:
                 errors.append(f"tool_calls[{i}] invalid priority")
 
         if name == "request_spd_resupply":
+            if args.get("urgency") not in ALLOWED_PRIORITIES:
+                errors.append(f"tool_calls[{i}] invalid urgency")
+            if not args.get("item_name"):
+                errors.append(f"tool_calls[{i}] missing item_name")
+
+        if name == "request_spd_robot_delivery":
             if args.get("urgency") not in ALLOWED_PRIORITIES:
                 errors.append(f"tool_calls[{i}] invalid urgency")
             if not args.get("item_name"):

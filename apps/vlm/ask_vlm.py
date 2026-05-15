@@ -3,11 +3,15 @@ import mimetypes
 import os
 from pathlib import Path
 
-from openai import OpenAI
+from dotenv import load_dotenv
+from openai import AzureOpenAI
 
-VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8001/v1")
-VLM_MODEL = os.getenv("VLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "local-dev-key")
+load_dotenv(override=True)
+
+AZURE_VLM_ENDPOINT = os.getenv("AZURE_VLM_ENDPOINT")
+AZURE_VLM_DEPLOYMENT = os.getenv("AZURE_VLM_DEPLOYMENT", "gpt-4o")
+AZURE_VLM_API_VERSION = os.getenv("AZURE_VLM_API_VERSION", "2024-12-01-preview")
+AZURE_VLM_API_KEY = os.getenv("AZURE_VLM_API_KEY")
 
 
 def image_to_data_url(path: str) -> str:
@@ -18,10 +22,14 @@ def image_to_data_url(path: str) -> str:
 
 
 def ask_vlm(image_path: str, question: str) -> str:
-    client = OpenAI(base_url=VLM_BASE_URL, api_key=OPENAI_API_KEY)
+    client = AzureOpenAI(
+        azure_endpoint=AZURE_VLM_ENDPOINT,
+        api_key=AZURE_VLM_API_KEY,
+        api_version=AZURE_VLM_API_VERSION,
+    )
 
     r = client.chat.completions.create(
-        model=VLM_MODEL,
+        model=AZURE_VLM_DEPLOYMENT,
         messages=[
             {
                 "role": "user",
@@ -40,7 +48,7 @@ def ask_vlm(image_path: str, question: str) -> str:
             }
         ],
         temperature=0,
-        max_tokens=300
+        max_tokens=300,
     )
 
     return r.choices[0].message.content

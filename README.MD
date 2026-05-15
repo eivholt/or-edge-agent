@@ -28,6 +28,7 @@ vllm serve Qwen/Qwen2.5-7B-Instruct \
   --max-model-len 4096 \
   --gpu-memory-utilization 0.70 \
   --api-key local-dev-key
+  --enable-auto-tool-choice --tool-call-parser hermes
 
   eivho@DESKTOP-OM4KVB3:~/repos/or-edge-agent$ source .venv/bin/activate
 
