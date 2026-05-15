@@ -9,12 +9,13 @@ mcp = FastMCP("vlm")
 
 
 @mcp.tool()
-def inspect_scene(image_path: str, question: str) -> str:
+def inspect_scene_remote(image_path: str, question: str) -> str:
     """
-    Inspect an OR scene image using the Azure VLM (gpt-4o).
+    Inspect an OR scene image using the REMOTE Azure VLM (gpt-4o).
 
-    Use this to visually verify instruments, confirm item placement,
-    or answer questions about what is visible on the table.
+    This is a cloud-hosted fallback — use only when the local VLM
+    (inspect_scene_local) is unavailable or returns uncertain results.
+    Higher quality but slower and incurs cloud costs.
 
     Args:
         image_path: Path to the image file to inspect.

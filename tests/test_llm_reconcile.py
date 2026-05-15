@@ -2,7 +2,7 @@
 
 Requires:
   - Synthetic EMR API running: uvicorn synthetic_emr.api:app --port 9000
-  - vLLM running at $VLM_BASE_URL (default http://localhost:8001/v1)
+  - vLLM running at $VLM_BASE_URL (default http://localhost:8081/v1)
 
 Mark with ``pytest -m llm`` or run the whole suite.
 """

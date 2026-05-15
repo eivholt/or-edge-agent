@@ -57,9 +57,7 @@ eivho@DESKTOP-OM4KVB3:~/repos/or-edge-agent$ source .venv-vllm/bin/activate
 
 vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
   --host 0.0.0.0 \
-  --port 8001 \
-  --dtype auto \
-  --max-model-len 4096 \
+  --port 8081 \
   --gpu-memory-utilization 0.45 \
   --limit-mm-per-prompt '{"image":1,"video":0}' \
   --api-key local-dev-key
@@ -67,7 +65,7 @@ vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
 
   vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
   --host 0.0.0.0 \
-  --port 8001 \
+  --port 8081 \
   --dtype auto \
   --max-model-len 8192 \
   --gpu-memory-utilization 0.9 \
@@ -75,7 +73,10 @@ vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
   --allowed-local-media-path /home/eivho/repos-native/or-edge-agent/data \
   --api-key local-dev-key
 
-curl http://localhost:8001/v1/chat/completions \
+
+  cd /home/eivho/repos-native/or-edge-agent && source .venv-vllm/bin/activate && vllm serve mistralai/Ministral-3-3B-Instruct-2512-BF16 --host 0.0.0.0 --port 8081 --dtype auto --max-model-len 4096 --gpu-memory-utilization 0.70 --enable-auto-tool-choice --tool-call-parser mistral 2>&1
+
+curl http://localhost:8081/v1/chat/completions \
   -H "Authorization: Bearer local-dev-key" \
   -H "Content-Type: application/json" \
   -d '{

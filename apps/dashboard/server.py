@@ -289,11 +289,13 @@ def _run_pipeline(scenario_path: str):
                   item_name=args.get("item_name"),
                   urgency=args.get("urgency"),
                   detail=f"{'🤖 Robot' if 'robot' in name else '🏃 Runner'}: {args.get('item_name')}")
-        elif name == "inspect_scene":
+        elif name in ("inspect_scene_local", "inspect_scene_remote"):
+            vlm_type = "local" if name == "inspect_scene_local" else "remote (gpt-4o)"
             _emit("vlm",
                   answer=args.get("question", ""),
                   image_url=image_url,
-                  detail=f"VLM query: {args.get('question', '')[:80]}")
+                  vlm_type=vlm_type,
+                  detail=f"VLM [{vlm_type}]: {args.get('question', '')[:80]}")
 
     # 7. Validation
     errors = validate_decision(decision, event)

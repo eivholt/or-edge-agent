@@ -1,3 +1,4 @@
+import base64
 import json
 import os
 from dataclasses import dataclass
@@ -20,13 +21,14 @@ logfire.configure(service_name="or-edge-agent")
 logfire.instrument_pydantic_ai()
 logfire.instrument_httpx()
 
-VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8001/v1")
+VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8081/v1")
 # VLM_MODEL = os.getenv("VLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
 # VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512")
 VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512-BF16")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "local-dev-key")
 
 EMR_BASE_URL = "http://localhost:9000"
+DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 INSTRUCTIONS = """\
 You are a local OR logistics agent for a synthetic demo.
@@ -49,6 +51,15 @@ use task_type="human_review" instead.
 
 For each item in unaccounted, call create_synthetic_or_task with
 task_type="missing_supply".
+
+Visual inspection rules:
+- If the event has an image_path AND the confidence is low (< 0.80) or
+  the event_type is one of (sterile_zone_ambiguity, instrument_out_of_zone,
+  wrong_case_cart_candidate), call inspect_scene_local FIRST to visually
+  verify before creating tasks.
+- Only call inspect_scene_remote (Azure gpt-4o) if the local VLM is
+  unavailable or if its answer is inconclusive.  It is a costly cloud
+  fallback — use it as a last resort.
 
 Tool routing rules:
 - For a confirmed missing required item → create_synthetic_or_task with task_type="missing_supply".
@@ -177,6 +188,96 @@ def set_or_prep_light(
         "duration_seconds": duration_seconds,
         "status": "set",
     }
+
+
+@or_agent.tool
+def inspect_scene_local(
+    ctx: RunContext[AgentDeps],
+    image_path: str,
+    question: str,
+) -> dict:
+    """Inspect an OR scene image using the LOCAL VLM (Ministral 3B on-device).
+
+    This is the preferred, low-latency visual inspection tool.
+    Use it to verify instrument presence, tray layout, or setup state.
+    Do not use for clinical diagnosis.
+
+    Args:
+        image_path: Path to an image file (relative to data/ or absolute).
+        question: What to ask the VLM about the image.
+    """
+    resolved = Path(image_path)
+    if not resolved.is_absolute():
+        resolved = DATA_DIR / image_path
+
+    if not resolved.is_file():
+        return {"error": f"image not found: {resolved}"}
+
+    suffix = resolved.suffix.lower().lstrip(".")
+    mime_map = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}
+    mime_subtype = mime_map.get(suffix)
+    if not mime_subtype:
+        return {"error": f"unsupported image format: {suffix}"}
+
+    encoded = base64.b64encode(resolved.read_bytes()).decode()
+    data_url = f"data:image/{mime_subtype};base64,{encoded}"
+
+    payload = {
+        "model": VLM_MODEL,
+        "messages": [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": question},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }
+        ],
+        "max_tokens": 512,
+        "temperature": 0,
+    }
+
+    r = httpx.post(
+        f"{VLM_BASE_URL}/chat/completions",
+        json=payload,
+        headers={
+            "Authorization": f"Bearer {OPENAI_API_KEY}",
+            "Content-Type": "application/json",
+        },
+        timeout=60,
+    )
+    r.raise_for_status()
+    answer = r.json()["choices"][0]["message"]["content"]
+    return {"image": str(resolved), "question": question, "answer": answer}
+
+
+@or_agent.tool
+def inspect_scene_remote(
+    ctx: RunContext[AgentDeps],
+    image_path: str,
+    question: str,
+) -> dict:
+    """Inspect an OR scene image using the REMOTE Azure VLM (gpt-4o).
+
+    This is a cloud fallback — only use when inspect_scene_local is
+    unavailable or returns inconclusive results.  Higher quality but
+    slower and incurs cloud costs.
+
+    Args:
+        image_path: Path to an image file (relative to data/ or absolute).
+        question: What to ask the VLM about the image.
+    """
+    from apps.vlm.ask_vlm import ask_vlm
+
+    resolved = Path(image_path)
+    if not resolved.is_absolute():
+        resolved = DATA_DIR / image_path
+
+    if not resolved.is_file():
+        return {"error": f"image not found: {resolved}"}
+
+    answer = ask_vlm(str(resolved), question)
+    return {"image": str(resolved), "question": question, "answer": answer}
 
 
 # ── Helpers ──────────────────────────────────────────────────────────

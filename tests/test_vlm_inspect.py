@@ -1,9 +1,10 @@
-"""Tests that exercise both the local LLM (Qwen2.5-7B-Instruct) and
-the Azure VLM (gpt-4o) through the agent’s inspect_scene tool.
+"""Tests that exercise the VLM pipeline:
+  - Local VLM: Ministral-3-3B via vLLM (inspect_scene_local)
+  - Remote VLM: Azure gpt-4o (inspect_scene_remote / ask_vlm)
 
 Requires:
   - Synthetic EMR API running: uvicorn synthetic_emr.api:app --port 9000
-  - vLLM running Qwen2.5-7B-Instruct at $VLM_BASE_URL
+  - vLLM running Ministral-3-3B at $VLM_BASE_URL
   - Azure OpenAI VLM configured in .env
 
 Run with: pytest -m llm tests/test_vlm_inspect.py -v

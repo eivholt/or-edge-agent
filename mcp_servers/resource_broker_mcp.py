@@ -47,15 +47,17 @@ def get_model_runtime_status() -> dict:
 
     return {
         "gpu": gpu,
-        "local_text_llm": {
+        "local_llm_vlm": {
             "available": True,
-            "endpoint": "http://localhost:8000/v1",
-            "role": "agent reasoning"
+            "endpoint": "http://localhost:8081/v1",
+            "model": "Ministral-3-3B-Instruct-2512-BF16",
+            "role": "agent reasoning + local visual inspection"
         },
-        "local_vlm": {
+        "remote_vlm": {
             "available": True,
-            "endpoint": "http://localhost:8001/v1",
-            "role": "visual ambiguity resolution"
+            "provider": "Azure OpenAI",
+            "model": "gpt-4o",
+            "role": "fallback visual inspection (cloud, last resort)"
         },
         "future_devkit_mode": {
             "detector": "local",

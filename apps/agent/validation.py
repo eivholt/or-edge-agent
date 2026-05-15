@@ -5,7 +5,8 @@ ALLOWED_TOOLS = {
     "request_spd_resupply",
     "request_spd_robot_delivery",
     "set_or_prep_light",
-    "inspect_scene"
+    "inspect_scene_local",
+    "inspect_scene_remote",
 }
 
 ALLOWED_TASK_TYPES = {

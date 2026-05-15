@@ -11,7 +11,7 @@ logfire.instrument_httpx()
 
 mcp = FastMCP("vlm-inspector")
 
-VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8001/v1")
+VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8081/v1")
 # VLM_MODEL = os.getenv("VLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
 # VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512")
 VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512-BF16")
@@ -21,9 +21,10 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 
 @mcp.tool()
-def inspect_scene(image_path: str, question: str) -> dict:
+def inspect_scene_local(image_path: str, question: str) -> dict:
     """
-    Send an image to the local VLM for visual inspection of an OR scene.
+    Send an image to the LOCAL VLM (Ministral 3B on-device) for visual
+    inspection of an OR scene.  This is the preferred, low-latency option.
 
     image_path: path to an image file relative to the project data/ directory,
                 or an absolute path.
