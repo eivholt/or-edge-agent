@@ -3,7 +3,11 @@ import os
 from pathlib import Path
 
 import httpx
+import logfire
 from mcp.server.fastmcp import FastMCP
+
+logfire.configure(service_name="mcp-vlm-inspector")
+logfire.instrument_httpx()
 
 mcp = FastMCP("vlm-inspector")
 

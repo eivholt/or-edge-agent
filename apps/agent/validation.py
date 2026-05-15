@@ -1,3 +1,5 @@
+import logfire
+
 ALLOWED_TOOLS = {
     "create_synthetic_or_task",
     "request_spd_resupply",
@@ -26,6 +28,7 @@ VLM_TRIGGER_EVENT_TYPES = {
 }
 
 
+@logfire.instrument("should_call_vlm confidence={event[confidence]} event_type={event[event_type]}")
 def should_call_vlm(event: dict) -> bool:
     if event["confidence"] < 0.80:
         return True
@@ -36,6 +39,7 @@ def should_call_vlm(event: dict) -> bool:
     return False
 
 
+@logfire.instrument("validate_decision")
 def validate_decision(decision: dict, event: dict) -> list[str]:
     errors: list[str] = []
 

@@ -1,4 +1,7 @@
+import logfire
 from mcp.server.fastmcp import FastMCP
+
+logfire.configure(service_name="mcp-or-logistics")
 
 mcp = FastMCP("or-logistics")
 

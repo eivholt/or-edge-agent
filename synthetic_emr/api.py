@@ -1,8 +1,12 @@
+import logfire
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import Literal
 
+logfire.configure(service_name="synthetic-emr-api")
+
 app = FastAPI(title="Synthetic OR EMR API")
+logfire.instrument_fastapi(app)
 
 CASES = {
     "CASE-1042": {

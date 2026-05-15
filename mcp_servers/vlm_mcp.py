@@ -1,6 +1,9 @@
+import logfire
 from mcp.server.fastmcp import FastMCP
 
 from apps.vlm.ask_vlm import ask_vlm
+
+logfire.configure(service_name="mcp-vlm")
 
 mcp = FastMCP("vlm")
 

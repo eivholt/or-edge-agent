@@ -7,7 +7,10 @@ and returns a list of proposed tool-call dicts the agent should consider.
 
 from __future__ import annotations
 
+import logfire
 
+
+@logfire.instrument("reconcile case_id={case[case_id]}")
 def reconcile(event: dict, case: dict) -> list[dict]:
     """Return proposed tool_calls for the gap between *event* and *case*.
 

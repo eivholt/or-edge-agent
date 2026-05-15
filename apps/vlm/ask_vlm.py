@@ -3,10 +3,14 @@ import mimetypes
 import os
 from pathlib import Path
 
+import logfire
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 
 load_dotenv(override=True)
+
+logfire.configure(service_name="or-edge-agent")
+logfire.instrument_openai()
 
 AZURE_VLM_ENDPOINT = os.getenv("AZURE_VLM_ENDPOINT")
 AZURE_VLM_DEPLOYMENT = os.getenv("AZURE_VLM_DEPLOYMENT", "gpt-4o")
@@ -21,6 +25,7 @@ def image_to_data_url(path: str) -> str:
     return f"data:{mime};base64,{b64}"
 
 
+@logfire.instrument("ask_vlm question={question}")
 def ask_vlm(image_path: str, question: str) -> str:
     client = AzureOpenAI(
         azure_endpoint=AZURE_VLM_ENDPOINT,

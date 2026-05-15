@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 import httpx
+import logfire
 from dotenv import load_dotenv
 from pydantic_ai import Agent, ModelSettings, RunContext, Tool
 from pydantic_ai.models.openai import OpenAIChatModel
@@ -14,6 +15,10 @@ from pydantic_ai.providers.openai import OpenAIProvider
 from apps.agent.reconcile import reconcile
 
 load_dotenv(override=True)
+
+logfire.configure(service_name="or-edge-agent")
+logfire.instrument_pydantic_ai()
+logfire.instrument_httpx()
 
 VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8001/v1")
 VLM_MODEL = os.getenv("VLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
@@ -179,6 +184,7 @@ def load_event(path: str) -> dict:
     return json.loads(Path(path).read_text())
 
 
+@logfire.instrument("get_case case_id={case_id}")
 def get_case(case_id: str) -> dict:
     r = httpx.get(f"{EMR_BASE_URL}/cases/{case_id}", timeout=10)
     r.raise_for_status()
@@ -196,6 +202,7 @@ def get_resources(room_id: str) -> dict:
     }
 
 
+@logfire.instrument("reconcile_setup case_id={case[case_id]}")
 def reconcile_setup(event: dict, case: dict) -> dict:
     """Run deterministic reconciliation — no LLM needed."""
     calls = reconcile(event, case)
@@ -211,6 +218,7 @@ def reconcile_setup(event: dict, case: dict) -> dict:
     }
 
 
+@logfire.instrument("ask_agent case_id={case[case_id]} event_type={event[event_type]}")
 def ask_agent(event: dict, case: dict, resources: dict) -> dict:
     recon = reconcile_setup(event, case)
 

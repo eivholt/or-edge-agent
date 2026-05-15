@@ -1,5 +1,9 @@
+import logfire
 import httpx
 from mcp.server.fastmcp import FastMCP
+
+logfire.configure(service_name="mcp-synthetic-emr")
+logfire.instrument_httpx()
 
 mcp = FastMCP("synthetic-emr")
 
