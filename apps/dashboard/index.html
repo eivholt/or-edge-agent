@@ -1,0 +1,585 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OR Edge Agent — Dashboard</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #71717a;
+    --accent: #6366f1;
+    --accent-glow: rgba(99,102,241,.25);
+    --green: #22c55e;
+    --yellow: #eab308;
+    --red: #ef4444;
+    --blue: #3b82f6;
+    --orange: #f97316;
+    --cyan: #06b6d4;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 2rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  header h1 { font-size: 1.1rem; font-weight: 600; letter-spacing: -.01em; }
+  header h1 span { color: var(--accent); }
+  .conn-status { display: flex; align-items: center; gap: .5rem; font-size: .8rem; color: var(--muted); }
+  .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); transition: background .3s; }
+  .conn-dot.connected { background: var(--green); }
+
+  /* ── Layout ─────────────────────────────────────────── */
+  .grid {
+    display: grid;
+    grid-template-columns: 1fr 380px;
+    gap: 0;
+    height: calc(100vh - 57px - 52px);
+  }
+  .diagram-pane { padding: 2rem; overflow: auto; display: flex; align-items: flex-start; justify-content: center; }
+  .sidebar { border-left: 1px solid var(--border); background: var(--surface); overflow-y: auto; padding: 1rem; }
+
+  /* ── Component Diagram ──────────────────────────────── */
+  .diagram { display: flex; flex-direction: column; gap: 1.25rem; width: 100%; max-width: 860px; }
+  .row { display: flex; gap: 1rem; justify-content: center; align-items: stretch; }
+  .node {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 1rem 1.25rem; min-width: 150px; position: relative;
+    transition: border-color .3s, box-shadow .4s, transform .2s; cursor: default;
+  }
+  .node:hover { transform: translateY(-1px); }
+  .node.active { border-color: var(--accent); box-shadow: 0 0 20px var(--accent-glow), 0 0 60px rgba(99,102,241,.08); }
+  .node.active .node-icon { animation: pulse-icon .8s ease-out; }
+  @keyframes pulse-icon { 0%{transform:scale(1)} 50%{transform:scale(1.2)} 100%{transform:scale(1)} }
+  .node-header { display: flex; align-items: center; gap: .5rem; margin-bottom: .5rem; }
+  .node-icon { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: .9rem; flex-shrink: 0; }
+  .node-title { font-size: .82rem; font-weight: 600; line-height: 1.2; }
+  .node-subtitle { font-size: .7rem; color: var(--muted); margin-top: .15rem; }
+  .node-body { font-size: .72rem; color: var(--muted); line-height: 1.5; margin-top: .5rem; max-height: 120px; overflow-y: auto; }
+  .node-body code { background: rgba(255,255,255,.06); padding: .1em .3em; border-radius: 4px; font-size: .68rem; font-family: 'JetBrains Mono','Fira Code',monospace; }
+
+  .flow-arrow { display: flex; justify-content: center; color: var(--border); font-size: 1.2rem; transition: color .3s; }
+  .flow-arrow.active { color: var(--accent); }
+
+  .node[data-component="detector"] .node-icon { background: rgba(249,115,22,.15); color: var(--orange); }
+  .node[data-component="reconcile"] .node-icon { background: rgba(6,182,212,.15); color: var(--cyan); }
+  .node[data-component="agent"] .node-icon { background: rgba(99,102,241,.15); color: var(--accent); }
+  .node[data-component="emr_api"] .node-icon { background: rgba(34,197,94,.15); color: var(--green); }
+  .node[data-component="vlm"] .node-icon { background: rgba(234,179,8,.15); color: var(--yellow); }
+  .node[data-component="prep_light"] .node-icon { background: rgba(239,68,68,.15); color: var(--red); }
+  .node[data-component="spd"] .node-icon { background: rgba(59,130,246,.15); color: var(--blue); }
+  .node[data-component="validation"] .node-icon { background: rgba(168,85,247,.15); color: #a855f7; }
+  .node[data-component="tasks"] .node-icon { background: rgba(34,197,94,.15); color: var(--green); }
+  .node[data-component="resources"] .node-icon { background: rgba(59,130,246,.15); color: var(--blue); }
+
+  /* ── Detector image ─────────────────────────────────── */
+  .detector-row { display: flex; gap: 1rem; align-items: stretch; }
+  .detector-image-wrap {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    overflow: hidden; width: 260px; min-height: 160px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    transition: border-color .3s, box-shadow .4s;
+  }
+  .detector-image-wrap.active { border-color: var(--orange); box-shadow: 0 0 20px rgba(249,115,22,.2); }
+  .detector-image-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 11px; }
+  .detector-image-wrap .placeholder { color: var(--muted); font-size: .72rem; text-align: center; padding: 2rem 1rem; }
+
+  /* ── Prep light ─────────────────────────────────────── */
+  .light-indicator { display: inline-flex; gap: 6px; margin-top: .5rem; }
+  .light-bulb { width: 20px; height: 20px; border-radius: 50%; border: 2px solid var(--border); transition: all .4s; }
+  .light-bulb.on { box-shadow: 0 0 12px currentColor; }
+  .light-bulb.green { border-color: var(--green); }
+  .light-bulb.green.on { background: var(--green); color: var(--green); }
+  .light-bulb.yellow { border-color: var(--yellow); }
+  .light-bulb.yellow.on { background: var(--yellow); color: var(--yellow); }
+  .light-bulb.red { border-color: var(--red); }
+  .light-bulb.red.on { background: var(--red); color: var(--red); }
+
+  /* ── Sidebar ────────────────────────────────────────── */
+  .sidebar h2 { font-size: .85rem; font-weight: 600; margin-bottom: .75rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+  .event-log { display: flex; flex-direction: column; gap: .5rem; }
+  .log-entry {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
+    padding: .6rem .75rem; font-size: .72rem; animation: slide-in .3s ease-out;
+    border-left: 3px solid var(--accent);
+  }
+  .log-entry .log-time { color: var(--muted); font-size: .65rem; font-family: monospace; }
+  .log-entry .log-comp { font-weight: 600; margin: .15rem 0; }
+  .log-entry .log-detail { color: var(--muted); word-break: break-word; }
+  .log-entry .log-detail code { background: rgba(255,255,255,.06); padding: .1em .3em; border-radius: 3px; font-family: 'JetBrains Mono',monospace; font-size: .65rem; }
+  .log-entry[data-component="detector"] { border-left-color: var(--orange); }
+  .log-entry[data-component="reconcile"] { border-left-color: var(--cyan); }
+  .log-entry[data-component="agent"] { border-left-color: var(--accent); }
+  .log-entry[data-component="emr_api"] { border-left-color: var(--green); }
+  .log-entry[data-component="vlm"] { border-left-color: var(--yellow); }
+  .log-entry[data-component="prep_light"] { border-left-color: var(--red); }
+  .log-entry[data-component="spd"] { border-left-color: var(--blue); }
+  .log-entry[data-component="validation"] { border-left-color: #a855f7; }
+  .log-entry[data-component="tasks"] { border-left-color: var(--green); }
+  @keyframes slide-in { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
+
+  /* ── Scenario buttons ───────────────────────────────── */
+  .scenario-bar { display: flex; gap: .5rem; padding: .75rem 0; margin-bottom: .75rem; border-bottom: 1px solid var(--border); flex-wrap: wrap; }
+  .scenario-btn {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 8px;
+    padding: .4rem .75rem; font-size: .72rem; cursor: pointer; transition: all .2s;
+  }
+  .scenario-btn:hover { border-color: var(--accent); background: rgba(99,102,241,.08); }
+  .scenario-btn:active { transform: scale(.97); }
+  .scenario-btn.running { border-color: var(--accent); background: rgba(99,102,241,.12); pointer-events: none; }
+
+  /* ── Debug task bar ─────────────────────────────────── */
+  .debug-bar {
+    background: var(--surface); border-bottom: 1px solid var(--border);
+    padding: .65rem 2rem; display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+  }
+  .debug-bar label { font-size: .72rem; color: var(--muted); font-weight: 500; white-space: nowrap; }
+  .debug-bar .debug-label { color: var(--orange); font-weight: 600; font-size: .75rem; }
+  .debug-bar select, .debug-bar button {
+    background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: .35rem .6rem; font-size: .7rem; cursor: pointer; font-family: inherit;
+  }
+  .debug-bar select { max-width: 220px; }
+  .debug-bar select:focus, .debug-bar button:focus { outline: 1px solid var(--accent); }
+  .debug-bar button:hover { border-color: var(--accent); background: rgba(99,102,241,.08); }
+  .debug-bar button.running { border-color: var(--accent); background: rgba(99,102,241,.12); pointer-events: none; }
+  .debug-bar .sep { width: 1px; height: 22px; background: var(--border); flex-shrink: 0; }
+  .debug-thumb {
+    width: 32px; height: 32px; border-radius: 6px; object-fit: cover; border: 1px solid var(--border); vertical-align: middle;
+  }
+
+  @media (max-width: 900px) {
+    .grid { grid-template-columns: 1fr; grid-template-rows: 1fr 300px; }
+    .sidebar { border-left: none; border-top: 1px solid var(--border); }
+    .detector-row { flex-direction: column; }
+    .detector-image-wrap { width: 100%; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span>⬡</span> OR Edge Agent</h1>
+  <div class="conn-status">
+    <div class="conn-dot" id="connDot"></div>
+    <span id="connLabel">Connecting…</span>
+  </div>
+</header>
+
+<!-- ── Debug task bar ──────────────────────────────────── -->
+<div class="debug-bar">
+  <label class="debug-label">🛠 Debug</label>
+  <div class="sep"></div>
+  <label>Image:</label>
+  <select id="selImage"><option value="">Loading…</option></select>
+  <img class="debug-thumb" id="debugThumb" src="" style="display:none" alt="preview">
+  <div class="sep"></div>
+  <label>Surgery:</label>
+  <select id="selCase"><option value="">Loading…</option></select>
+  <div class="sep"></div>
+  <label>Scenario:</label>
+  <select id="selScenario"><option value="">Loading…</option></select>
+  <button id="btnRun" onclick="runDebug()">▶ Run</button>
+</div>
+
+<div class="grid">
+  <!-- ── Diagram ──────────────────────────────────────── -->
+  <div class="diagram-pane">
+    <div class="diagram">
+
+      <!-- Row 1: Detector + Image -->
+      <div class="row detector-row">
+        <div class="detector-image-wrap" id="detectorImageWrap">
+          <div class="placeholder" id="detectorPlaceholder">No image yet<br>Run a scenario or select an image</div>
+          <img id="detectorImage" src="" style="display:none" alt="Detector frame">
+        </div>
+        <div class="node" data-component="detector" id="node-detector" style="flex:1">
+          <div class="node-header">
+            <div class="node-icon">📷</div>
+            <div>
+              <div class="node-title">Object Detector</div>
+              <div class="node-subtitle">fixture_detector.py</div>
+            </div>
+          </div>
+          <div class="node-body" id="body-detector">Waiting for events…</div>
+        </div>
+      </div>
+
+      <div class="flow-arrow" id="arrow-1">▼</div>
+
+      <!-- Row 2: EMR + Reconcile -->
+      <div class="row">
+        <div class="node" data-component="emr_api" id="node-emr_api">
+          <div class="node-header">
+            <div class="node-icon">🏥</div>
+            <div>
+              <div class="node-title">Synthetic EMR API</div>
+              <div class="node-subtitle">:9000 — FastAPI</div>
+            </div>
+          </div>
+          <div class="node-body" id="body-emr_api">Idle</div>
+        </div>
+        <div class="node" data-component="reconcile" id="node-reconcile">
+          <div class="node-header">
+            <div class="node-icon">⚖️</div>
+            <div>
+              <div class="node-title">Reconciliation</div>
+              <div class="node-subtitle">reconcile.py — deterministic</div>
+            </div>
+          </div>
+          <div class="node-body" id="body-reconcile">Idle</div>
+        </div>
+      </div>
+
+      <div class="flow-arrow" id="arrow-2">▼</div>
+
+      <!-- Row 3: Agent -->
+      <div class="row">
+        <div class="node" data-component="agent" id="node-agent" style="min-width:300px">
+          <div class="node-header">
+            <div class="node-icon">🤖</div>
+            <div>
+              <div class="node-title">LLM Agent</div>
+              <div class="node-subtitle">Qwen 2.5-7B · pydantic-ai · tool calling</div>
+            </div>
+          </div>
+          <div class="node-body" id="body-agent">Idle</div>
+        </div>
+      </div>
+
+      <div class="flow-arrow" id="arrow-3">▼</div>
+
+      <!-- Row 4: Outputs -->
+      <div class="row">
+        <div class="node" data-component="validation" id="node-validation">
+          <div class="node-header">
+            <div class="node-icon">🛡️</div>
+            <div>
+              <div class="node-title">Validation</div>
+              <div class="node-subtitle">safety gate</div>
+            </div>
+          </div>
+          <div class="node-body" id="body-validation">Idle</div>
+        </div>
+        <div class="node" data-component="vlm" id="node-vlm">
+          <div class="node-header">
+            <div class="node-icon">👁️</div>
+            <div>
+              <div class="node-title">VLM</div>
+              <div class="node-subtitle">Azure gpt-4o vision</div>
+            </div>
+          </div>
+          <img id="vlm-thumb" src="" alt="VLM input" style="display:none;width:100%;max-height:100px;object-fit:cover;border-radius:8px;margin-top:.5rem;border:1px solid var(--border)">
+          <div class="node-body" id="body-vlm">Idle</div>
+        </div>
+        <div class="node" data-component="resources" id="node-resources">
+          <div class="node-header">
+            <div class="node-icon">📦</div>
+            <div>
+              <div class="node-title">Resources</div>
+              <div class="node-subtitle">GPU / runners / porter</div>
+            </div>
+          </div>
+          <div class="node-body" id="body-resources">Idle</div>
+        </div>
+      </div>
+
+      <div class="flow-arrow" id="arrow-4">▼</div>
+
+      <!-- Row 5: Actuators -->
+      <div class="row">
+        <div class="node" data-component="tasks" id="node-tasks">
+          <div class="node-header">
+            <div class="node-icon">📋</div>
+            <div>
+              <div class="node-title">Task Queue</div>
+              <div class="node-subtitle">created tasks</div>
+            </div>
+          </div>
+          <div class="node-body" id="body-tasks">No tasks</div>
+        </div>
+        <div class="node" data-component="prep_light" id="node-prep_light">
+          <div class="node-header">
+            <div class="node-icon">💡</div>
+            <div>
+              <div class="node-title">OR Prep Light</div>
+              <div class="node-subtitle">stack light actuator</div>
+            </div>
+          </div>
+          <div class="light-indicator">
+            <div class="light-bulb green" id="light-green"></div>
+            <div class="light-bulb yellow" id="light-yellow"></div>
+            <div class="light-bulb red" id="light-red"></div>
+          </div>
+          <div class="node-body" id="body-prep_light">Off</div>
+        </div>
+        <div class="node" data-component="spd" id="node-spd">
+          <div class="node-header">
+            <div class="node-icon">🚚</div>
+            <div>
+              <div class="node-title">SPD Resupply</div>
+              <div class="node-subtitle">robot / human runner</div>
+            </div>
+          </div>
+          <div class="node-body" id="body-spd">Idle</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Sidebar ──────────────────────────────────────── -->
+  <div class="sidebar">
+    <h2>Quick Scenarios</h2>
+    <div class="scenario-bar">
+      <button class="scenario-btn" onclick="runScenario('missing_suction_tip')">🔧 Missing Suction Tip</button>
+      <button class="scenario-btn" onclick="runScenario('procedure_changed')">🔄 Procedure Changed</button>
+      <button class="scenario-btn" onclick="runScenario('specimen_handoff')">🧪 Specimen Handoff</button>
+    </div>
+    <h2>Event Log</h2>
+    <div class="event-log" id="eventLog"></div>
+  </div>
+</div>
+
+<script>
+const MAX_LOG = 80;
+const log = document.getElementById('eventLog');
+const connDot = document.getElementById('connDot');
+const connLabel = document.getElementById('connLabel');
+const detectorImage = document.getElementById('detectorImage');
+const detectorPlaceholder = document.getElementById('detectorPlaceholder');
+const detectorImageWrap = document.getElementById('detectorImageWrap');
+const debugThumb = document.getElementById('debugThumb');
+
+// ── SSE Connection ──────────────────────────────────
+function connect() {
+  const es = new EventSource('/events');
+  es.onopen = () => { connDot.classList.add('connected'); connLabel.textContent = 'Connected'; };
+  es.onerror = () => { connDot.classList.remove('connected'); connLabel.textContent = 'Reconnecting…'; };
+  es.onmessage = (e) => { try { handleEvent(JSON.parse(e.data)); } catch {} };
+}
+connect();
+
+// ── Load debug bar options ──────────────────────────
+async function loadDebugOptions() {
+  try {
+    const imgs = await (await fetch('/api/images')).json();
+    const sel = document.getElementById('selImage');
+    sel.innerHTML = '<option value="">— select image —</option>';
+    imgs.forEach(img => {
+      const opt = document.createElement('option');
+      opt.value = img.url;
+      opt.textContent = img.name.replace(/_/g, ' ');
+      sel.appendChild(opt);
+    });
+    sel.onchange = () => {
+      if (sel.value) { debugThumb.src = sel.value; debugThumb.style.display = ''; }
+      else { debugThumb.style.display = 'none'; }
+    };
+  } catch {}
+
+  try {
+    const cases = await (await fetch('/api/cases')).json();
+    const sel = document.getElementById('selCase');
+    sel.innerHTML = '<option value="">— select surgery —</option>';
+    cases.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.case_id;
+      opt.textContent = c.case_id + ' — ' + c.procedure;
+      sel.appendChild(opt);
+    });
+  } catch {}
+
+  try {
+    const scenarios = await (await fetch('/api/scenarios')).json();
+    const sel = document.getElementById('selScenario');
+    sel.innerHTML = '<option value="">— select scenario —</option>';
+    scenarios.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.name;
+      opt.textContent = s.name.replace(/_/g, ' ');
+      sel.appendChild(opt);
+    });
+  } catch {}
+}
+loadDebugOptions();
+
+// ── Event Handler ───────────────────────────────────
+function handleEvent(ev) {
+  const comp = ev.component;
+  if (!comp) return;
+  activateNode(comp);
+  activateArrows(comp);
+  updateBody(comp, ev);
+  if (comp === 'prep_light' && ev.color) setLight(ev.color);
+  if (comp === 'detector' && ev.image_url) showDetectorImage(ev.image_url);
+  addLog(ev);
+}
+
+function showDetectorImage(url) {
+  detectorImage.src = url;
+  detectorImage.style.display = 'block';
+  detectorPlaceholder.style.display = 'none';
+  detectorImageWrap.classList.add('active');
+  clearTimeout(detectorImageWrap._timer);
+  detectorImageWrap._timer = setTimeout(() => detectorImageWrap.classList.remove('active'), 3000);
+}
+
+function activateNode(comp) {
+  const node = document.getElementById('node-' + comp);
+  if (!node) return;
+  node.classList.add('active');
+  clearTimeout(node._timer);
+  node._timer = setTimeout(() => node.classList.remove('active'), 3000);
+}
+
+function activateArrows(comp) {
+  const map = {
+    detector: ['arrow-1'], emr_api: ['arrow-1','arrow-2'], reconcile: ['arrow-1','arrow-2'],
+    agent: ['arrow-2','arrow-3'], validation: ['arrow-3','arrow-4'], vlm: ['arrow-3'],
+    tasks: ['arrow-4'], prep_light: ['arrow-4'], spd: ['arrow-4'],
+  };
+  (map[comp] || []).forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.classList.add('active');
+    clearTimeout(el._timer);
+    el._timer = setTimeout(() => el.classList.remove('active'), 2500);
+  });
+}
+
+function updateBody(comp, ev) {
+  const body = document.getElementById('body-' + comp);
+  if (!body) return;
+  const detail = ev.detail || ev.summary || '';
+
+  if (comp === 'detector') {
+    let html = '';
+    if (ev.event_type) html += 'Type: <code>' + esc(ev.event_type) + '</code><br>';
+    if (ev.confidence != null) html += 'Confidence: <code>' + ev.confidence + '</code><br>';
+    if (ev.visible_items) html += 'Visible: <code>' + esc(ev.visible_items.join(', ')) + '</code><br>';
+    if (ev.missing_items && ev.missing_items.length) html += 'Missing: <code>' + esc(ev.missing_items.join(', ')) + '</code>';
+    body.innerHTML = html || esc(detail) || 'Active';
+  } else if (comp === 'reconcile') {
+    let html = '';
+    if (ev.all_present != null) html += 'All present: <code>' + ev.all_present + '</code><br>';
+    if (ev.actionable_missing) html += 'Gaps: <code>' + esc(ev.actionable_missing.join(', ') || 'none') + '</code><br>';
+    if (ev.unaccounted) html += 'Unaccounted: <code>' + esc(ev.unaccounted.join(', ') || 'none') + '</code>';
+    body.innerHTML = html || esc(detail) || 'Done';
+  } else if (comp === 'agent') {
+    let html = '';
+    if (ev.status) html += 'Status: <code>' + esc(ev.status) + '</code><br>';
+    if (ev.tool_calls != null) html += 'Tool calls: <code>' + ev.tool_calls + '</code><br>';
+    if (ev.summary) html += esc(ev.summary);
+    body.innerHTML = html || esc(detail) || 'Active';
+  } else if (comp === 'tasks') {
+    let html = '';
+    if (ev.task_type) html += '<code>' + esc(ev.task_type) + '</code> ';
+    if (ev.priority) html += '[' + esc(ev.priority) + ']<br>';
+    if (ev.summary) html += esc(ev.summary);
+    body.innerHTML = html || esc(detail) || 'Created';
+  } else if (comp === 'prep_light') {
+    body.innerHTML = ev.color ? 'Color: <code>' + esc(ev.color) + '</code> — ' + (ev.duration_seconds || '?') + 's' : esc(detail);
+  } else if (comp === 'spd') {
+    let html = '';
+    if (ev.item_name) html += 'Item: <code>' + esc(ev.item_name) + '</code><br>';
+    if (ev.urgency) html += 'Urgency: <code>' + esc(ev.urgency) + '</code>';
+    body.innerHTML = html || esc(detail) || 'Requested';
+  } else if (comp === 'vlm') {
+    body.innerHTML = ev.answer ? '<code>' + esc(truncate(ev.answer, 120)) + '</code>' : esc(detail) || 'Active';
+    if (ev.image_url) { const vt = document.getElementById('vlm-thumb'); vt.src = ev.image_url; vt.style.display = 'block'; }
+  } else if (comp === 'validation') {
+    body.innerHTML = (ev.errors && ev.errors.length)
+      ? '<span style="color:var(--red)">\u26A0 ' + ev.errors.length + ' error(s)</span>'
+      : '<span style="color:var(--green)">\u2713 Passed</span>';
+  } else if (comp === 'emr_api') {
+    let html = '';
+    if (ev.case_id) html += 'Case: <code>' + esc(ev.case_id) + '</code><br>';
+    if (ev.procedure) html += esc(ev.procedure);
+    body.innerHTML = html || esc(detail) || 'Active';
+  } else if (comp === 'resources') {
+    body.innerHTML = esc(detail) || 'Queried';
+  } else {
+    body.textContent = detail || 'Active';
+  }
+}
+
+function setLight(color) {
+  ['green','yellow','red'].forEach(c => document.getElementById('light-'+c).classList.remove('on'));
+  const el = document.getElementById('light-'+color);
+  if (el) el.classList.add('on');
+}
+
+function addLog(ev) {
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.dataset.component = ev.component;
+  const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+  const detail = ev.detail || ev.summary || JSON.stringify(ev).slice(0, 200);
+  entry.innerHTML =
+    '<div class="log-time">' + time + '</div>' +
+    '<div class="log-comp">' + formatComponent(ev.component) + '</div>' +
+    '<div class="log-detail">' + esc(truncate(detail, 180)) + '</div>';
+  log.prepend(entry);
+  while (log.children.length > MAX_LOG) log.lastChild.remove();
+}
+
+function formatComponent(c) {
+  return {
+    detector:'\uD83D\uDCF7 Detector', reconcile:'\u2696\uFE0F Reconcile', agent:'\uD83E\uDD16 Agent',
+    emr_api:'\uD83C\uDFE5 EMR API', vlm:'\uD83D\uDC41\uFE0F VLM', validation:'\uD83D\uDEE1\uFE0F Validation',
+    tasks:'\uD83D\uDCCB Tasks', prep_light:'\uD83D\uDCA1 Prep Light', spd:'\uD83D\uDE9A SPD', resources:'\uD83D\uDCE6 Resources',
+  }[c] || c;
+}
+
+function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '\u2026' : s; }
+function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
+
+// ── Quick Scenario Runner ───────────────────────────
+async function runScenario(name) {
+  const btns = document.querySelectorAll('.scenario-btn');
+  btns.forEach(b => b.classList.add('running'));
+  try {
+    const r = await fetch('/run/' + encodeURIComponent(name), { method: 'POST' });
+    const data = await r.json();
+    if (data.error) alert('Error: ' + data.error);
+  } catch (e) { alert('Failed: ' + e.message); }
+  finally { setTimeout(() => btns.forEach(b => b.classList.remove('running')), 1000); }
+}
+
+// ── Debug Runner ────────────────────────────────────
+async function runDebug() {
+  const scenario = document.getElementById('selScenario').value;
+  const imageUrl = document.getElementById('selImage').value;
+  const btn = document.getElementById('btnRun');
+
+  if (!scenario) { alert('Select a scenario first'); return; }
+
+  btn.classList.add('running');
+  btn.textContent = '\u23F3 Running\u2026';
+
+  // If an image is selected, show it immediately as detector frame
+  if (imageUrl) showDetectorImage(imageUrl);
+
+  try {
+    const r = await fetch('/run/' + encodeURIComponent(scenario), { method: 'POST' });
+    const data = await r.json();
+    if (data.error) alert('Error: ' + data.error);
+  } catch (e) { alert('Failed: ' + e.message); }
+  finally { setTimeout(() => { btn.classList.remove('running'); btn.textContent = '\u25B6 Run'; }, 1000); }
+}
+</script>
+</body>
+</html>
