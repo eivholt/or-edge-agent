@@ -83,5 +83,28 @@ def set_or_prep_light(room_id: str, color: str, duration_seconds: int) -> dict:
     }
 
 
+@mcp.tool()
+def request_spd_robot_delivery(item_name: str, destination_room: str, urgency: str) -> dict:
+    """
+    Request delivery of a sterile supply or instrument set by indoor robot.
+
+    Use this when a missing physical item blocks OR setup and robot delivery
+    is available for the current synthetic pathway.
+
+    Do not use for items requiring direct human sign-off.
+    Urgency must be one of: low, normal, high.
+    """
+    if urgency not in {"low", "normal", "high"}:
+        return {"error": "urgency must be low, normal, or high"}
+
+    return {
+        "delivery_id": f"ROBOT-{item_name}-{destination_room}",
+        "item_name": item_name,
+        "destination_room": destination_room,
+        "urgency": urgency,
+        "eta_seconds": 180,
+        "status": "robot_delivery_requested"
+    }
+
 if __name__ == "__main__":
     mcp.run()

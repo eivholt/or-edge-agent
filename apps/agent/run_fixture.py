@@ -8,8 +8,8 @@ from openai import OpenAI
 
 from apps.agent.validation import validate_decision
 
-TEXT_LLM_BASE_URL = os.getenv("TEXT_LLM_BASE_URL", "http://localhost:8000/v1")
-TEXT_LLM_MODEL = os.getenv("TEXT_LLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
+VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8001/v1")
+VLM_MODEL = os.getenv("VLM_MODEL", "Qwen/Qwen2.5-VL-7B-Instruct")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "local-dev-key")
 
 EMR_BASE_URL = "http://localhost:9000"
@@ -60,7 +60,7 @@ def get_resources(room_id: str) -> dict:
 
 
 def ask_agent(event: dict, case: dict, resources: dict) -> dict:
-    client = OpenAI(base_url=TEXT_LLM_BASE_URL, api_key=OPENAI_API_KEY)
+    client = OpenAI(base_url=VLM_BASE_URL, api_key=OPENAI_API_KEY)
 
     payload = {
         "event": event,
@@ -69,12 +69,13 @@ def ask_agent(event: dict, case: dict, resources: dict) -> dict:
         "allowed_tools": [
             "create_synthetic_or_task",
             "request_spd_resupply",
-            "set_or_prep_light"
+            "set_or_prep_light",
+            "inspect_scene"
         ]
     }
 
     r = client.chat.completions.create(
-        model=TEXT_LLM_MODEL,
+        model=VLM_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": json.dumps(payload, indent=2)}

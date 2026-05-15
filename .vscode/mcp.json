@@ -13,6 +13,20 @@
       "args": [
         "${workspaceFolder}/mcp_servers/or_logistics_mcp.py"
       ]
-    }
+    },
+    "vlm-inspector": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "${workspaceFolder}/mcp_servers/vlm_inspector_mcp.py"
+      ]
+    },
+    "resource-broker": {
+      "type": "stdio",
+      "command": "${workspaceFolder}/.venv/bin/python",
+      "args": [
+        "${workspaceFolder}/mcp_servers/resource_broker_mcp.py"
+      ]
+}
   }
 }

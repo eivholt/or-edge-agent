@@ -1,0 +1,30 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Run synthetic EMR API",
+      "type": "shell",
+      "command": "source .venv/bin/activate && uvicorn synthetic_emr.api:app --reload --port 9000",
+      "isBackground": true,
+      "problemMatcher": []
+    },
+    {
+      "label": "Run tests",
+      "type": "shell",
+      "command": "source .venv/bin/activate && pytest -q",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run fixture detector",
+      "type": "shell",
+      "command": "source .venv/bin/activate && python apps/detector/fixture_detector.py",
+      "problemMatcher": []
+    },
+    {
+      "label": "Run missing suction scenario",
+      "type": "shell",
+      "command": "source .venv/bin/activate && python apps/agent/run_fixture.py scenarios/missing_suction_tip.json",
+      "problemMatcher": []
+    }
+  ]
+}

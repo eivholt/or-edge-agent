@@ -1,7 +1,8 @@
 ALLOWED_TOOLS = {
     "create_synthetic_or_task",
     "request_spd_resupply",
-    "set_or_prep_light"
+    "set_or_prep_light",
+    "inspect_scene"
 }
 
 ALLOWED_TASK_TYPES = {
@@ -16,6 +17,22 @@ ALLOWED_TASK_TYPES = {
 
 ALLOWED_PRIORITIES = {"low", "normal", "high"}
 ALLOWED_LIGHTS = {"green", "yellow", "red"}
+
+VLM_TRIGGER_EVENT_TYPES = {
+    "instrument_out_of_zone",
+    "sterile_zone_ambiguity",
+    "wrong_case_cart_candidate",
+}
+
+
+def should_call_vlm(event: dict) -> bool:
+    if event["confidence"] < 0.80:
+        return True
+    if event["event_type"] in VLM_TRIGGER_EVENT_TYPES:
+        return True
+    if event["missing_or_uncertain"]:
+        return True
+    return False
 
 
 def validate_decision(decision: dict, event: dict) -> list[str]:

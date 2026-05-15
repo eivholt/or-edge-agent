@@ -2,6 +2,11 @@ ssh eivho@192.168.1.107 -p 2222
 
 uvicorn synthetic_emr.api:app --reload --port 9000
 
+
+uv pip install \
+  --extra-index-url https://wheels.vllm.ai/0.20.2/cu129 \
+  vllm==0.20.2
+
 uv venv --python python3.12 .venv-vllm --seed
 source .venv-vllm/bin/activate
 
@@ -58,24 +63,15 @@ vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
   --limit-mm-per-prompt '{"image":1,"video":0}' \
   --api-key local-dev-key
 
-  vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
-  --host 0.0.0.0 \
-  --port 8001 \
-  --dtype auto \
-  --max-model-len 4096 \
-  --gpu-memory-utilization 0.6 \
-  --limit-mm-per-prompt '{"image":1,"video":0}' \
-  --allowed-local-media-path ~/repos/or-edge-agent/data \
-  --api-key local-dev-key
 
   vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
   --host 0.0.0.0 \
   --port 8001 \
   --dtype auto \
-  --max-model-len 4096 \
-  --gpu-memory-utilization 0.8 \
+  --max-model-len 8192 \
+  --gpu-memory-utilization 0.9 \
   --limit-mm-per-prompt '{"image":1,"video":0}' \
-  --allowed-local-media-path /home/eivho/repos/or-edge-agent/data \
+  --allowed-local-media-path /home/eivho/repos-native/or-edge-agent/data \
   --api-key local-dev-key
 
 curl http://localhost:8001/v1/chat/completions \
@@ -119,3 +115,6 @@ connectaddress=172.24.98.15 connectport=22
 
 sudo service ssh start
 sudo service ssh status
+
+sudo nvidia-ctk runtime configure --runtime=docker
+sudo systemctl restart docker
