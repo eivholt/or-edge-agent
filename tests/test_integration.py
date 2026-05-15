@@ -1,13 +1,13 @@
-"""Full integration tests: mocked detector → reconcile → LLM agent → tool calls.
+"""Full integration tests: mocked detector → EMR API → reconcile → LLM agent → tool calls.
 
-Each test simulates a detector event (mocked), feeds it through the real
-reconciliation and agent pipeline, and asserts on the tool calls the agent
-actually executes.  The local LLM (Qwen2.5-7B-Instruct) does real inference
-and calls real pydantic_ai tools.
+Each test simulates a detector event (mocked), fetches the case from the
+locally hosted synthetic EMR API (localhost:9000), then runs through the
+real reconciliation and agent pipeline.  The local LLM (Qwen2.5-7B-Instruct)
+does real inference and calls real pydantic_ai tools.
 
 Requires:
+  - Synthetic EMR API running: uvicorn synthetic_emr.api:app --port 9000
   - vLLM running Qwen2.5-7B-Instruct at $VLM_BASE_URL
-  - Azure VLM configured in .env (only for tests that trigger inspect_scene)
 
 Run with: pytest -m llm tests/test_integration.py -v
 """
@@ -23,6 +23,7 @@ from apps.agent.run_fixture import (
     INSTRUCTIONS,
     _model,
     ask_agent,
+    get_case,
     get_resources,
     reconcile_setup,
 )
@@ -48,21 +49,12 @@ MISSING_REQUIRED_EVENT = {
     "timestamp": "2026-05-15T08:00:00+02:00",
 }
 
-MISSING_REQUIRED_CASE = {
-    "case_id": "CASE-INT-1",
-    "procedure": "synthetic laparoscopic cholecystectomy",
-    "phase": "pre_op_setup",
-    "priority": "normal",
-    "required_items": ["scalpel", "forceps", "trocar", "bovie_tip", "specimen_cup"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
 
 @pytest.mark.llm
 def test_multiple_missing_required_items():
     """Two required items missing → agent should create tasks for both."""
-    decision = ask_agent(MISSING_REQUIRED_EVENT, MISSING_REQUIRED_CASE, RESOURCES)
+    case = get_case("CASE-INT-1")
+    decision = ask_agent(MISSING_REQUIRED_EVENT, case, RESOURCES)
     errors = validate_decision(decision, MISSING_REQUIRED_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -100,21 +92,12 @@ ALL_PRESENT_EVENT = {
     "timestamp": "2026-05-15T08:05:00+02:00",
 }
 
-ALL_PRESENT_CASE = {
-    "case_id": "CASE-INT-2",
-    "procedure": "synthetic minor excision",
-    "phase": "pre_op_setup",
-    "priority": "normal",
-    "required_items": ["scalpel", "forceps", "trocar", "specimen_cup"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
 
 @pytest.mark.llm
 def test_all_present_fast_path():
     """All required items visible → no LLM call, empty tool_calls."""
-    decision = ask_agent(ALL_PRESENT_EVENT, ALL_PRESENT_CASE, RESOURCES)
+    case = get_case("CASE-INT-2")
+    decision = ask_agent(ALL_PRESENT_EVENT, case, RESOURCES)
     errors = validate_decision(decision, ALL_PRESENT_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -140,23 +123,12 @@ MISSING_NOT_REQUIRED_EVENT = {
     "timestamp": "2026-05-15T08:10:00+02:00",
 }
 
-MISSING_NOT_REQUIRED_CASE = {
-    "case_id": "CASE-INT-3",
-    "procedure": "synthetic wound closure",
-    "phase": "pre_op_setup",
-    "priority": "normal",
-    "required_items": ["scalpel", "forceps", "trocar"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
 
 @pytest.mark.llm
 def test_missing_items_not_required_no_task():
     """Items flagged missing but not required → fast path, no tasks."""
-    decision = ask_agent(
-        MISSING_NOT_REQUIRED_EVENT, MISSING_NOT_REQUIRED_CASE, RESOURCES
-    )
+    case = get_case("CASE-INT-3")
+    decision = ask_agent(MISSING_NOT_REQUIRED_EVENT, case, RESOURCES)
     errors = validate_decision(decision, MISSING_NOT_REQUIRED_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -181,22 +153,13 @@ MIXED_EVENT = {
     "timestamp": "2026-05-15T08:15:00+02:00",
 }
 
-MIXED_CASE = {
-    "case_id": "CASE-INT-4",
-    "procedure": "synthetic laparoscopic biopsy",
-    "phase": "pre_op_setup",
-    "priority": "high",
-    "required_items": ["scalpel", "forceps", "trocar", "suction_tip"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
 
 @pytest.mark.llm
 def test_mixed_missing_only_required_get_tasks():
     """trocar and suction_tip are missing+required; retractor is not required.
     Agent should create tasks only for trocar and suction_tip."""
-    decision = ask_agent(MIXED_EVENT, MIXED_CASE, RESOURCES)
+    case = get_case("CASE-INT-4")
+    decision = ask_agent(MIXED_EVENT, case, RESOURCES)
     errors = validate_decision(decision, MIXED_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -235,7 +198,8 @@ def test_mixed_missing_only_required_get_tasks():
 @pytest.mark.llm
 def test_reconcile_feeds_correct_gaps_to_agent():
     """Verify reconcile_setup produces the right gaps and the agent acts on them."""
-    recon = reconcile_setup(MIXED_EVENT, MIXED_CASE)
+    case = get_case("CASE-INT-4")
+    recon = reconcile_setup(MIXED_EVENT, case)
 
     assert sorted(recon["actionable_missing"]) == ["suction_tip", "trocar"]
     assert recon["unaccounted"] == []
@@ -258,21 +222,12 @@ SPECIMEN_EVENT = {
     "timestamp": "2026-05-15T08:30:00+02:00",
 }
 
-SPECIMEN_CASE = {
-    "case_id": "CASE-INT-6",
-    "procedure": "synthetic biopsy",
-    "phase": "intra_op",
-    "priority": "normal",
-    "required_items": ["specimen_cup", "forceps"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
 
 @pytest.mark.llm
 def test_specimen_event_all_present():
     """Specimen container seen, all items present → no tasks."""
-    decision = ask_agent(SPECIMEN_EVENT, SPECIMEN_CASE, RESOURCES)
+    case = get_case("CASE-INT-6")
+    decision = ask_agent(SPECIMEN_EVENT, case, RESOURCES)
     errors = validate_decision(decision, SPECIMEN_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -297,24 +252,15 @@ UNACCOUNTED_EVENT = {
     "timestamp": "2026-05-15T08:35:00+02:00",
 }
 
-UNACCOUNTED_CASE = {
-    "case_id": "CASE-INT-7",
-    "procedure": "synthetic appendectomy",
-    "phase": "pre_op_setup",
-    "priority": "normal",
-    "required_items": ["scalpel", "forceps", "trocar"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
 
 @pytest.mark.llm
 def test_unaccounted_items_get_tasks():
     """forceps and trocar required but never seen or flagged → agent should act."""
-    recon = reconcile_setup(UNACCOUNTED_EVENT, UNACCOUNTED_CASE)
+    case = get_case("CASE-INT-7")
+    recon = reconcile_setup(UNACCOUNTED_EVENT, case)
     assert sorted(recon["unaccounted"]) == ["forceps", "trocar"]
 
-    decision = ask_agent(UNACCOUNTED_EVENT, UNACCOUNTED_CASE, RESOURCES)
+    decision = ask_agent(UNACCOUNTED_EVENT, case, RESOURCES)
     errors = validate_decision(decision, UNACCOUNTED_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -344,23 +290,12 @@ PROCEDURE_CHANGED_EVENT = {
     "timestamp": "2026-05-15T09:00:00+02:00",
 }
 
-PROCEDURE_CHANGED_CASE = {
-    "case_id": "CASE-INT-10",
-    "procedure": "synthetic laparoscopic cholecystectomy (changed from appendectomy)",
-    "phase": "pre_op_setup",
-    "priority": "high",
-    "required_items": ["scalpel", "forceps", "trocar", "specimen_cup", "suction_tip"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
 
 @pytest.mark.llm
 def test_procedure_changed_creates_review_and_hold():
     """Pathway changed after setup → procedure_change_review + porter_hold + yellow light."""
-    decision = ask_agent(
-        PROCEDURE_CHANGED_EVENT, PROCEDURE_CHANGED_CASE, RESOURCES
-    )
+    case = get_case("CASE-INT-10")
+    decision = ask_agent(PROCEDURE_CHANGED_EVENT, case, RESOURCES)
     errors = validate_decision(decision, PROCEDURE_CHANGED_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -404,16 +339,6 @@ STERILE_ZONE_EVENT = {
     "timestamp": "2026-05-15T09:10:00+02:00",
 }
 
-STERILE_ZONE_CASE = {
-    "case_id": "CASE-INT-11",
-    "procedure": "synthetic minor excision",
-    "phase": "pre_op_setup",
-    "priority": "normal",
-    "required_items": ["scalpel", "trocar", "forceps"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
 
 @pytest.mark.llm
 def test_sterile_zone_ambiguity_creates_human_review():
@@ -421,7 +346,8 @@ def test_sterile_zone_ambiguity_creates_human_review():
 
     The agent may attempt to set the prep light, but validation must reject
     actuation below confidence 0.8 — verifying the guardrail works."""
-    decision = ask_agent(STERILE_ZONE_EVENT, STERILE_ZONE_CASE, RESOURCES)
+    case = get_case("CASE-INT-11")
+    decision = ask_agent(STERILE_ZONE_EVENT, case, RESOURCES)
 
     task_calls = [
         c for c in decision["tool_calls"]
@@ -529,15 +455,7 @@ def test_dynamic_tool_swap_robot_delivery():
         "confidence": 0.90,
         "timestamp": "2026-05-15T09:20:00+02:00",
     }
-    case = {
-        "case_id": "CASE-INT-12",
-        "procedure": "synthetic laparoscopic biopsy",
-        "phase": "pre_op_setup",
-        "priority": "normal",
-        "required_items": ["scalpel", "forceps", "trocar", "suction_tip"],
-        "open_items": [],
-        "porter_release_allowed": False,
-    }
+    case = get_case("CASE-INT-12")
     resources = get_resources("OR-2")
     recon = reconcile_setup(event, case)
 

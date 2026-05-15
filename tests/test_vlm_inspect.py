@@ -1,7 +1,8 @@
 """Tests that exercise both the local LLM (Qwen2.5-7B-Instruct) and
-the Azure VLM (gpt-4o) through the agent's inspect_scene tool.
+the Azure VLM (gpt-4o) through the agent’s inspect_scene tool.
 
 Requires:
+  - Synthetic EMR API running: uvicorn synthetic_emr.api:app --port 9000
   - vLLM running Qwen2.5-7B-Instruct at $VLM_BASE_URL
   - Azure OpenAI VLM configured in .env
 
@@ -11,7 +12,7 @@ Run with: pytest -m llm tests/test_vlm_inspect.py -v
 import pytest
 
 from apps.vlm.ask_vlm import ask_vlm
-from apps.agent.run_fixture import ask_agent, get_resources
+from apps.agent.run_fixture import ask_agent, get_case, get_resources
 from apps.agent.validation import validate_decision
 
 IMAGE_PATH = "data/surgery_tools_1024.jpg"
@@ -48,16 +49,6 @@ EVENT_UNCERTAIN = {
     "image_path": IMAGE_PATH,
 }
 
-CASE_VLM = {
-    "case_id": "CASE-VLM",
-    "procedure": "synthetic minor excision",
-    "phase": "pre_op_setup",
-    "priority": "normal",
-    "required_items": ["scalpel", "forceps", "scissors"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
 
 @pytest.mark.llm
 def test_agent_handles_uncertain_event_with_missing_required():
@@ -68,7 +59,8 @@ def test_agent_handles_uncertain_event_with_missing_required():
     The agent may optionally call inspect_scene to verify, then should
     create a missing_supply or human_review task.
     """
-    decision = ask_agent(EVENT_UNCERTAIN, CASE_VLM, RESOURCES)
+    case = get_case("CASE-VLM")
+    decision = ask_agent(EVENT_UNCERTAIN, case, RESOURCES)
     errors = validate_decision(decision, EVENT_UNCERTAIN)
     assert not errors, f"Validation errors: {errors}"
 

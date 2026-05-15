@@ -1,12 +1,15 @@
 """Test 1: same physical event, different pathway — end-to-end via LLM.
 
-Requires the VLM running at $VLM_BASE_URL (default http://localhost:8001/v1).
+Requires:
+  - Synthetic EMR API running: uvicorn synthetic_emr.api:app --port 9000
+  - vLLM running at $VLM_BASE_URL (default http://localhost:8001/v1)
+
 Mark with ``pytest -m llm`` or run the whole suite.
 """
 
 import pytest
 
-from apps.agent.run_fixture import ask_agent, get_resources
+from apps.agent.run_fixture import ask_agent, get_case, get_resources
 from apps.agent.validation import validate_decision
 
 # Shared detector event — identical for both cases
@@ -24,33 +27,12 @@ EVENT = {
 
 RESOURCES = get_resources("OR-2")
 
-# Case A: procedure does NOT require suction_tip
-CASE_A = {
-    "case_id": "CASE-A",
-    "procedure": "synthetic minor excision",
-    "phase": "pre_op_setup",
-    "priority": "normal",
-    "required_items": ["scalpel", "forceps", "trocar", "specimen_cup"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
-# Case B: procedure DOES require suction_tip
-CASE_B = {
-    "case_id": "CASE-B",
-    "procedure": "synthetic laparoscopic biopsy",
-    "phase": "pre_op_setup",
-    "priority": "normal",
-    "required_items": ["scalpel", "forceps", "trocar", "specimen_cup", "suction_tip"],
-    "open_items": [],
-    "porter_release_allowed": False,
-}
-
 
 @pytest.mark.llm
 def test_no_escalation_when_pathway_does_not_need_item():
     """Case A: suction_tip missing but not required → no missing_supply task."""
-    decision = ask_agent(EVENT, CASE_A, RESOURCES)
+    case_a = get_case("CASE-A")
+    decision = ask_agent(EVENT, case_a, RESOURCES)
     errors = validate_decision(decision, EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -68,7 +50,8 @@ def test_no_escalation_when_pathway_does_not_need_item():
 @pytest.mark.llm
 def test_missing_supply_when_pathway_requires_item():
     """Case B: suction_tip missing and required → missing_supply task."""
-    decision = ask_agent(EVENT, CASE_B, RESOURCES)
+    case_b = get_case("CASE-B")
+    decision = ask_agent(EVENT, case_b, RESOURCES)
     errors = validate_decision(decision, EVENT)
     assert not errors, f"Validation errors: {errors}"
 
