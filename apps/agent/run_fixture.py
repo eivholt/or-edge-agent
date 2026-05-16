@@ -31,66 +31,30 @@ EMR_BASE_URL = "http://localhost:9000"
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 INSTRUCTIONS = """\
-You are a local OR logistics agent for a synthetic demo.
+You are a local OR logistics agent (synthetic demo). Coordinate supply, porter, specimen, and review workflows. Never diagnose or prescribe.
 
-You coordinate simulated OR setup, supply, porter, specimen, and review workflows.
-You must not diagnose, prescribe, select treatment, or clear a real clinical case.
+CRITICAL: Execute ONLY the proposed_tool_calls from reconciliation. Do NOT invent or add extra tasks.
+- If proposed_tool_calls is empty [], set green light and return a short summary. Nothing else.
+- Items in flagged_no_deficit have NO deficit (visible >= required). NEVER create tasks for them.
+- confidence_level is "high" (>=0.80) or "low" (<0.80). The proposed calls already have the correct task_type.
 
-You receive a reconciliation result that has ALREADY compared the detector's
-observations against the surgical pathway's required items. Trust the
-reconciliation — do NOT second-guess it or re-derive the gap list.
+Rules:
 
-If reconciliation shows no gaps (actionable_missing and unaccounted are both
-empty AND all_present is true) AND no proposed_tool_calls, set the prep light
-to green and respond with a short summary confirming readiness.
+1. all_present=true, empty proposed_tool_calls → set_or_prep_light green, short summary. No tasks.
 
-For each item in actionable_missing, call create_synthetic_or_task with
-task_type="missing_supply" — UNLESS the event indicates uncertainty
-(event_type is sterile_zone_ambiguity or confidence < 0.80), in which case
-use task_type="human_review" instead.
+2. proposed_tool_calls not empty → execute each proposed call exactly as given. Do not change task_type.
 
-For each item in unaccounted, call create_synthetic_or_task with
-task_type="missing_supply".
+3. visually_ready_but_pathway_changed → proposed_tool_calls includes procedure_change_review + porter_hold + yellow light. Execute all of them, plus any deficit tasks.
 
-Visual inspection rules:
-- If the event has an image_path AND the confidence is low (< 0.80) or
-  the event_type is one of (sterile_zone_ambiguity, instrument_out_of_zone,
-  wrong_case_cart_candidate, specimen_ready_check, room_turnover_check,
-  ppe_compliance_check), call inspect_scene_local FIRST to visually
-  verify before creating tasks.
-- Only call inspect_scene_remote (Azure gpt-4o) if the local VLM is
-  unavailable or if its answer is inconclusive.  It is a costly cloud
-  fallback — use it as a last resort.
+4. VLM events (confidence_level="low" or these event_types) → call inspect_scene_local FIRST:
+   - instrument_out_of_zone → human_review + yellow light
+   - specimen_ready_check → specimen_handoff or human_review
+   - room_turnover_check → porter_hold + red light
+   - ppe_compliance_check → human_review + yellow light
+   Only use inspect_scene_remote as cloud fallback if local VLM fails.
 
-VLM scene-understanding event types (always inspect_scene_local first):
-- instrument_out_of_zone: Ask "Are any surgical instruments outside the
-  sterile drape boundary? Describe which instruments and their positions."
-  If yes → create_synthetic_or_task with task_type="human_review",
-  priority="high". Set prep light yellow.
-- specimen_ready_check: Ask "Is there a labeled specimen container ready
-  for pickup on or near the mayo stand?" If yes → create_synthetic_or_task
-  with task_type="specimen_handoff". If unclear → task_type="human_review".
-- room_turnover_check: Ask "Is there still patient equipment (bed, gurney,
-  IV pole, monitors) from the previous case in this OR?" If yes →
-  create_synthetic_or_task with task_type="porter_hold", summary describing
-  what remains. Set prep light red.
-- ppe_compliance_check: Ask "Are all visible personnel wearing required
-  surgical PPE (cap, mask, gown)?" If non-compliant →
-  create_synthetic_or_task with task_type="human_review", priority="high".
-  Set prep light yellow.
-
-Tool routing rules:
-- For a confirmed missing required item → create_synthetic_or_task with task_type="missing_supply".
-- For uncertainty about a required item (sterile_zone_ambiguity, confidence < 0.80)
-  → create_synthetic_or_task with task_type="human_review".
-  Do NOT assert sterile or contaminated status — defer to human review.
-- For a visually_ready_but_pathway_changed event, do ALL three:
-  1. create_synthetic_or_task with task_type="procedure_change_review", priority="high".
-  2. create_synthetic_or_task with task_type="porter_hold".
-  3. set_or_prep_light with color="yellow".
-- Use request_spd_resupply only when explicitly told to order a sterile resupply delivery.
-- If request_spd_robot_delivery is available, prefer it over request_spd_resupply.
-- Never set an actuator (set_or_prep_light) unless the event is high confidence and operational-only."""
+Never actuate (set_or_prep_light) when confidence_level is "low" unless VLM has confirmed.
+Use request_spd_resupply only when explicitly told to order sterile resupply."""
 
 
 # ── Dependencies (passed via RunContext) ─────────────────────────────
@@ -348,8 +312,17 @@ def reconcile_setup(event: dict, case: dict) -> dict:
 
     missing = set(event.get("missing_or_uncertain", []))
 
-    # Items where detector flagged uncertain AND pathway needs them
-    actionable_missing = sorted(item for item in missing if item in required)
+    # Items where detector flagged uncertain AND pathway needs them AND there's a deficit
+    actionable_missing = sorted(
+        item for item in missing
+        if item in required and visible.get(item, 0) < required[item]
+    )
+
+    # Items flagged uncertain but with no actual deficit (have >= need) — ignore these
+    flagged_no_deficit = sorted(
+        item for item in missing
+        if item in required and visible.get(item, 0) >= required[item]
+    )
 
     # Items with count deficit (need > have) that weren't flagged
     unaccounted = sorted(
@@ -359,8 +332,17 @@ def reconcile_setup(event: dict, case: dict) -> dict:
 
     truly_clear = len(calls) == 0 and not actionable_missing and not unaccounted
 
+    # Categorical confidence label for LLM consumption
+    conf = event.get("confidence", 1.0)
+    if conf >= 0.80:
+        confidence_level = "high"
+    else:
+        confidence_level = "low"
+
     return {
+        "confidence_level": confidence_level,
         "actionable_missing": actionable_missing,
+        "flagged_no_deficit": flagged_no_deficit,
         "unaccounted": unaccounted,
         "all_present": truly_clear,
         "proposed_tool_calls": calls,
@@ -380,7 +362,7 @@ def ask_agent(event: dict, case: dict, resources: dict) -> dict:
 
     prompt = json.dumps(
         {
-            "event": event,
+            "event": {k: v for k, v in event.items() if k != "missing_or_uncertain"},
             "synthetic_pathway": case,
             "reconciliation": recon,
             "resources": resources,

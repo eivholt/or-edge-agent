@@ -240,8 +240,12 @@ def _run_pipeline(scenario_path: str):
           detail=f"Detected {total_visible} items, "
                  f"{len(event.get('missing_or_uncertain', []))} uncertain")
 
-    # 2. Fetch case from EMR
+    # 2. Fetch case from EMR (via synthetic-emr MCP → EMR API)
     case_id = event["case_id"]
+    _emit("tool_call",
+          tool_name="get_surgical_pathway",
+          tool_args={"case_id": case_id},
+          detail=f"get_surgical_pathway(case_id={case_id})")
     r = httpx.get(f"http://localhost:9000/cases/{case_id}", timeout=10)
     r.raise_for_status()
     case = r.json()
@@ -259,14 +263,18 @@ def _run_pipeline(scenario_path: str):
           unaccounted=recon["unaccounted"],
           detail=_reconcile_detail(recon))
 
-    # 4. Resources
+    # 4. Resources (queried as part of agent context)
     resources = {
         "room_id": event.get("room_id", "OR-?"),
         "sterile_processing_robot": {"available": True, "eta_seconds": 180},
         "human_runner": {"available": True, "eta_seconds": 420},
         "porter": {"available": True, "eta_seconds": 300},
     }
-    _emit("resources", detail="Robot: 180s | Runner: 420s | Porter: 300s")
+    _emit("tool_call",
+          tool_name="get_available_or_resources",
+          tool_args={"room_id": event.get("room_id", "OR-?")},
+          tool_result={"robot": "180s", "runner": "420s", "porter": "300s"},
+          detail="get_available_or_resources → 3 resources")
 
     # 5. Agent decision (import inline to avoid circular / heavy load)
     _emit("agent", status="thinking", detail="LLM processing…")
@@ -286,6 +294,14 @@ def _run_pipeline(scenario_path: str):
         name = tc.get("name", "")
         args = tc.get("arguments", {})
 
+        # Always emit tool_call to light up the MCP sub-node
+        _emit("tool_call",
+              tool_name=name,
+              tool_args=args,
+              tool_result=tc.get("result", {}),
+              detail=f"{name}({', '.join(f'{k}={v}' for k,v in list(args.items())[:3])})")
+
+        # Also emit to the external service nodes
         if name == "create_synthetic_or_task":
             _emit("tasks",
                   task_type=args.get("task_type"),
@@ -304,9 +320,9 @@ def _run_pipeline(scenario_path: str):
                   detail=f"{'Robot' if 'robot' in name else 'Runner'}: {args.get('item_name')}")
         elif name == "inspect_scene_local":
             _emit("vlm_local",
-                  answer=args.get("question", ""),
-                  image_url=image_url,
-                  detail=f"Local VLM (Ministral 3B): {args.get('question', '')[:80]}")
+                  question=args.get("question", ""),
+                  answer=tc.get("result", {}).get("answer", "") if isinstance(tc.get("result"), dict) else str(tc.get("result", "")),
+                  detail=f"Local VLM: {args.get('question', '')[:80]}")
         elif name == "inspect_scene_remote":
             _emit("vlm_remote",
                   answer=args.get("question", ""),

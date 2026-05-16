@@ -137,7 +137,7 @@
   .edge-bottom-row { display: flex; gap: .6rem; }
   .edge-bottom-row .node { flex: 1; }
 
-  /* ── MCP Zone ───────────────────────────────────────── */
+  /* ── MCP Zone → External APIs Zone ────────────────── */
   .zone-mcp { display: flex; flex-direction: column; padding-top: .5rem; }
   .zone-mcp .zone-label { color: var(--cyan); }
   .mcp-stack { display: flex; flex-direction: column; gap: .6rem; }
@@ -162,12 +162,18 @@
   .node-subtitle { font-size: .6rem; color: var(--muted); margin-top: .1rem; }
   .node-body {
     font-size: .68rem; color: var(--muted); line-height: 1.5; margin-top: .35rem;
-    max-height: 100px; overflow-y: auto;
+    max-height: 150px; overflow: hidden; position: relative;
   }
+  .node-body.expanded { max-height: none; overflow: visible; }
   .node-body code {
     background: rgba(255,255,255,.06); padding: .1em .3em; border-radius: 4px;
     font-size: .64rem; font-family: 'JetBrains Mono','Fira Code',monospace;
   }
+  .body-toggle {
+    display: none; font-size: .6rem; color: var(--accent); cursor: pointer;
+    margin-top: .2rem; user-select: none; opacity: .8;
+  }
+  .body-toggle:hover { opacity: 1; text-decoration: underline; }
 
   /* ── Node colors ────────────────────────────────────── */
   .node[data-component="detector"]   .node-icon { background: rgba(249,115,22,.15); color: var(--orange); }
@@ -181,6 +187,37 @@
   .node[data-component="validation"] .node-icon { background: rgba(168,85,247,.15); color: #a855f7; }
   .node[data-component="tasks"]      .node-icon { background: rgba(34,197,94,.15); color: var(--green); }
   .node[data-component="resources"]  .node-icon { background: rgba(59,130,246,.15); color: var(--blue); }
+
+  /* ── MCP sub-nodes inside agent ──────────────────── */
+  .agent-expanded {
+    display: flex; flex-direction: column; gap: .5rem;
+  }
+  .mcp-server-group {
+    border: 1px solid rgba(99,102,241,.15); border-radius: 8px;
+    padding: .5rem .6rem; background: rgba(99,102,241,.03);
+    margin-top: .35rem;
+  }
+  .mcp-server-header {
+    font-size: .62rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--accent); margin-bottom: .35rem;
+    display: flex; align-items: center; gap: .3rem;
+  }
+  .mcp-server-header .mcp-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--border); transition: background .3s;
+  }
+  .mcp-server-header .mcp-dot.active { background: var(--accent); }
+  .tool-list { display: flex; flex-direction: column; gap: .3rem; }
+  .tool-node {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    padding: .35rem .5rem; font-size: .62rem; color: var(--muted);
+    transition: border-color .3s, box-shadow .3s;
+  }
+  .tool-node.active { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
+  .tool-node .tool-name { font-weight: 600; color: var(--text); font-size: .64rem; }
+  .tool-node .tool-args { margin-top: .15rem; font-size: .58rem; line-height: 1.4; word-break: break-word; }
+  .tool-node .tool-args code { background: rgba(255,255,255,.06); padding: .05em .2em; border-radius: 3px; font-family: 'JetBrains Mono',monospace; font-size: .56rem; }
+  .tool-node .tool-result { margin-top: .15rem; font-size: .56rem; color: var(--green); }
 
   /* ── Flow arrows ────────────────────────────────────── */
   .flow-arrow {
@@ -207,6 +244,7 @@
   }
   .badge-physical { background: rgba(34,197,94,.1); color: var(--green); border: 1px solid rgba(34,197,94,.2); }
   .badge-cloud { background: rgba(168,85,247,.1); color: var(--purple); border: 1px solid rgba(168,85,247,.2); }
+  .badge-edge { background: rgba(234,179,8,.1); color: var(--yellow); border: 1px solid rgba(234,179,8,.2); }
 
   /* ── Prep light ─────────────────────────────────────── */
   .light-indicator { display: inline-flex; gap: 5px; margin-top: .4rem; }
@@ -253,6 +291,7 @@
   .log-entry[data-component="spd"]        { border-left-color: var(--blue); }
   .log-entry[data-component="validation"] { border-left-color: #a855f7; }
   .log-entry[data-component="tasks"]      { border-left-color: var(--green); }
+  .log-entry[data-component="tool_call"]  { border-left-color: var(--cyan); }
   @keyframes slide-in { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
 
   /* ── Scenario buttons ───────────────────────────────── */
@@ -409,7 +448,7 @@
 
           <div class="flow-arrow" id="arrow-2">↓</div>
 
-          <!-- LLM Agent -->
+          <!-- LLM Agent (expanded with MCP servers + tools) -->
           <div class="node" data-component="agent" id="node-agent">
             <div class="node-header">
               <div class="node-icon"></div>
@@ -419,33 +458,89 @@
               </div>
             </div>
             <div class="node-body" id="body-agent">Idle</div>
+
+            <div class="agent-expanded">
+              <!-- OR Logistics MCP -->
+              <div class="mcp-server-group" id="mcp-or-logistics">
+                <div class="mcp-server-header"><div class="mcp-dot" id="mcp-dot-logistics"></div> OR Logistics MCP</div>
+                <div class="tool-list">
+                  <div class="tool-node" id="tool-get_available_or_resources">
+                    <div class="tool-name">get_available_or_resources</div>
+                    <div class="tool-args" id="tool-args-get_available_or_resources"></div>
+                  </div>
+                  <div class="tool-node" id="tool-set_or_prep_light">
+                    <div class="tool-name">set_or_prep_light</div>
+                    <div class="tool-args" id="tool-args-set_or_prep_light"></div>
+                  </div>
+                  <div class="tool-node" id="tool-request_spd_resupply">
+                    <div class="tool-name">request_spd_resupply</div>
+                    <div class="tool-args" id="tool-args-request_spd_resupply"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Synthetic EMR MCP -->
+              <div class="mcp-server-group" id="mcp-synthetic-emr">
+                <div class="mcp-server-header"><div class="mcp-dot" id="mcp-dot-emr"></div> Synthetic EMR MCP</div>
+                <div class="tool-list">
+                  <div class="tool-node" id="tool-get_surgical_pathway">
+                    <div class="tool-name">get_surgical_pathway</div>
+                    <div class="tool-args" id="tool-args-get_surgical_pathway"></div>
+                  </div>
+                  <div class="tool-node" id="tool-get_case_setup_requirements">
+                    <div class="tool-name">get_case_setup_requirements</div>
+                    <div class="tool-args" id="tool-args-get_case_setup_requirements"></div>
+                  </div>
+                  <div class="tool-node" id="tool-create_synthetic_or_task">
+                    <div class="tool-name">create_synthetic_or_task</div>
+                    <div class="tool-args" id="tool-args-create_synthetic_or_task"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- VLM tools -->
+              <div class="mcp-server-group" id="mcp-vlm-tools">
+                <div class="mcp-server-header"><div class="mcp-dot" id="mcp-dot-vlm"></div> Vision Tools</div>
+                <div class="tool-list">
+                  <div class="tool-node" id="tool-inspect_scene_local">
+                    <div class="tool-name">inspect_scene_local</div>
+                    <div class="tool-args" id="tool-args-inspect_scene_local"></div>
+                  </div>
+                  <div class="tool-node" id="tool-inspect_scene_remote">
+                    <div class="tool-name">inspect_scene_remote</div>
+                    <div class="tool-args" id="tool-args-inspect_scene_remote"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
           <div class="flow-arrow" id="arrow-3">↓</div>
 
-          <!-- Bottom row: Validation + Local VLM -->
-          <div class="edge-bottom-row">
-            <div class="node" data-component="validation" id="node-validation">
-              <div class="node-header">
-                <div class="node-icon"></div>
-                <div>
-                  <div class="node-title">Validation</div>
-                  <div class="node-subtitle">Safety gate</div>
-                </div>
+          <!-- Local VLM — runs on edge device -->
+          <div class="node" data-component="vlm_local" id="node-vlm_local">
+            <div class="node-header">
+              <div class="node-icon"></div>
+              <div>
+                <div class="node-title">Local VLM <span class="badge-external badge-edge">Edge</span></div>
+                <div class="node-subtitle">Ministral 3B · vLLM · localhost:8081 · No cloud dependency</div>
               </div>
-              <div class="node-body" id="body-validation">Idle</div>
             </div>
-            <div class="node" data-component="vlm_local" id="node-vlm_local">
-              <div class="node-header">
-                <div class="node-icon"></div>
-                <div>
-                  <div class="node-title">Local VLM</div>
-                  <div class="node-subtitle">Ministral 3B · on-device vision</div>
-                </div>
+            <div class="node-body" id="body-vlm_local">Idle</div>
+          </div>
+
+          <div class="flow-arrow" id="arrow-4">↓</div>
+
+          <!-- Bottom: Validation -->
+          <div class="node" data-component="validation" id="node-validation">
+            <div class="node-header">
+              <div class="node-icon"></div>
+              <div>
+                <div class="node-title">Validation</div>
+                <div class="node-subtitle">Safety gate</div>
               </div>
-              <img id="vlm-local-thumb" class="vlm-thumb" src="" alt="VLM input">
-              <div class="node-body" id="body-vlm_local">Idle</div>
             </div>
+            <div class="node-body" id="body-validation">Idle</div>
           </div>
         </div>
       </div>
@@ -453,36 +548,39 @@
       <!-- ▸ Right Connector (col 4) ───────────────────── -->
       <div class="connector-r">
         <div class="conn-arrow" id="conn-right">&harr;</div>
-        <div class="conn-label">MCP<br>Protocol</div>
+        <div class="conn-label">API<br>Calls</div>
       </div>
 
-      <!-- ▸ MCP Servers (col 5) ───────────────────────── -->
+      <!-- ▸ External APIs & Services (col 5) ──────────── -->
       <div class="zone-mcp">
         <div class="zone-label">
-          MCP SERVERS
+          EXTERNAL SERVICES
         </div>
         <div class="mcp-stack">
           <div class="node" data-component="emr_api" id="node-emr_api">
             <div class="node-header">
               <div class="node-icon"></div>
               <div>
-                <div class="node-title">EMR API</div>
-                <div class="node-subtitle">Patient data, labs, orders</div>
+                <div class="node-title">EMR API <span class="badge-external badge-cloud">Network</span></div>
+                <div class="node-subtitle">localhost:9000 · Patient data</div>
               </div>
             </div>
             <div class="node-body" id="body-emr_api">Idle</div>
           </div>
 
-          <div class="node" data-component="resources" id="node-resources">
+          <div class="node" data-component="vlm_remote" id="node-vlm_remote">
             <div class="node-header">
               <div class="node-icon"></div>
               <div>
-                <div class="node-title">Resources</div>
-                <div class="node-subtitle">Runners / porter / robot</div>
+                <div class="node-title">Remote VLM <span class="badge-external badge-cloud">Cloud</span></div>
+                <div class="node-subtitle">GPT-4o · Azure · Fallback</div>
               </div>
             </div>
-            <div class="node-body" id="body-resources">Idle</div>
+            <img id="vlm-remote-thumb" class="vlm-thumb" src="" alt="VLM input">
+            <div class="node-body" id="body-vlm_remote">Idle</div>
           </div>
+
+          <div class="mcp-divider">Physical Outputs</div>
 
           <div class="node" data-component="tasks" id="node-tasks">
             <div class="node-header">
@@ -504,20 +602,6 @@
               </div>
             </div>
             <div class="node-body" id="body-spd">Idle</div>
-          </div>
-
-          <div class="mcp-divider">Cloud</div>
-
-          <div class="node" data-component="vlm_remote" id="node-vlm_remote">
-            <div class="node-header">
-              <div class="node-icon"></div>
-              <div>
-                <div class="node-title">Remote VLM <span class="badge-external badge-cloud">Cloud</span></div>
-                <div class="node-subtitle">GPT-4o · Azure · Fallback</div>
-              </div>
-            </div>
-            <img id="vlm-remote-thumb" class="vlm-thumb" src="" alt="VLM input">
-            <div class="node-body" id="body-vlm_remote">Idle</div>
           </div>
         </div>
       </div>
@@ -618,6 +702,7 @@ function handleEvent(ev) {
   if (comp === 'prep_light' && ev.color) setLight(ev.color);
   if (comp === 'detector' && ev.image_url) showDetectorImage(ev.image_url);
   if (comp === 'detector' && ev.detection_image_url) showDetectionOverlay(ev.detection_image_url);
+  if (comp === 'tool_call') activateTool(ev);
   addLog(ev);
 }
 
@@ -650,8 +735,8 @@ function activateArrows(comp) {
     detector: ['arrow-1'],
     reconcile: ['arrow-1','arrow-2'],
     agent: ['arrow-2','arrow-3'],
-    validation: ['arrow-3'],
-    vlm_local: ['arrow-3'],
+    vlm_local: ['arrow-3','arrow-4'],
+    validation: ['arrow-4'],
     tasks: [],
     prep_light: [],
     spd: [],
@@ -669,8 +754,8 @@ function activateArrows(comp) {
 function activateConnectors(comp) {
   // Left connector: camera/OR → edge device
   const leftComps = ['detector','prep_light'];
-  // Right connector: edge ↔ MCP servers
-  const rightComps = ['emr_api','reconcile','agent','tasks','spd','resources','vlm_remote'];
+  // Right connector: edge ↔ external APIs
+  const rightComps = ['emr_api','agent','tasks','spd','vlm_remote'];
   const cl = document.getElementById('conn-left');
   const cr = document.getElementById('conn-right');
   if (leftComps.includes(comp) && cl) {
@@ -685,9 +770,96 @@ function activateConnectors(comp) {
   }
 }
 
+function maybeAddToggle(body) {
+  // Remove any existing toggle
+  const old = body.parentElement.querySelector('.body-toggle');
+  if (old) old.remove();
+  // After render, check if content overflows
+  requestAnimationFrame(function() {
+    if (body.scrollHeight > body.clientHeight + 2) {
+      const toggle = document.createElement('div');
+      toggle.className = 'body-toggle';
+      toggle.style.display = 'block';
+      toggle.textContent = '▸ Show more';
+      toggle.onclick = function() {
+        const expanded = body.classList.toggle('expanded');
+        toggle.textContent = expanded ? '▾ Show less' : '▸ Show more';
+      };
+      body.parentElement.appendChild(toggle);
+    }
+  });
+}
+
+// ── Tool-call activation inside agent MCP sub-nodes ──
+const toolToMcp = {
+  get_available_or_resources: 'logistics',
+  set_or_prep_light: 'logistics',
+  request_spd_resupply: 'logistics',
+  get_surgical_pathway: 'emr',
+  get_case_setup_requirements: 'emr',
+  create_synthetic_or_task: 'emr',
+  inspect_scene_local: 'vlm',
+  inspect_scene_remote: 'vlm',
+};
+
+function activateTool(ev) {
+  const name = ev.tool_name;
+  if (!name) return;
+  const toolEl = document.getElementById('tool-' + name);
+  if (!toolEl) return;
+
+  // Light up the tool node
+  toolEl.classList.add('active');
+  clearTimeout(toolEl._timer);
+  toolEl._timer = setTimeout(() => toolEl.classList.remove('active'), 4000);
+
+  // Show args
+  const argsEl = document.getElementById('tool-args-' + name);
+  if (argsEl) {
+    let html = '';
+    if (ev.tool_args) {
+      const args = typeof ev.tool_args === 'string' ? ev.tool_args : JSON.stringify(ev.tool_args);
+      html += '→ <code>' + esc(truncate(args, 120)) + '</code>';
+    }
+    if (ev.tool_result) {
+      const res = typeof ev.tool_result === 'string' ? ev.tool_result : JSON.stringify(ev.tool_result);
+      html += '<div class="tool-result">← ' + esc(truncate(res, 100)) + '</div>';
+    }
+    argsEl.innerHTML = html;
+  }
+
+  // Light up the MCP server dot
+  const mcpKey = toolToMcp[name];
+  if (mcpKey) {
+    const dot = document.getElementById('mcp-dot-' + mcpKey);
+    if (dot) {
+      dot.classList.add('active');
+      clearTimeout(dot._timer);
+      dot._timer = setTimeout(() => dot.classList.remove('active'), 4000);
+    }
+  }
+
+  // Also activate the agent node itself
+  activateNode('agent');
+
+  // Activate right connector for tools that call external APIs
+  const externalTools = ['inspect_scene_remote', 'get_surgical_pathway', 'get_case_setup_requirements', 'create_synthetic_or_task'];
+  if (externalTools.includes(name)) {
+    const cr = document.getElementById('conn-right');
+    if (cr) {
+      cr.classList.add('active');
+      clearTimeout(cr._timer);
+      cr._timer = setTimeout(() => cr.classList.remove('active'), 3000);
+    }
+  }
+}
+
 function updateBody(comp, ev) {
   const body = document.getElementById('body-' + comp);
   if (!body) return;
+  body.classList.remove('expanded');
+  const oldToggle = body.parentElement.querySelector('.body-toggle');
+  if (oldToggle) oldToggle.remove();
   const detail = ev.detail || ev.summary || '';
 
   if (comp === 'detector') {
@@ -717,6 +889,7 @@ function updateBody(comp, ev) {
     if (ev.tool_calls != null) html += 'Tool calls: <code>' + ev.tool_calls + '</code><br>';
     if (ev.summary) html += esc(ev.summary);
     body.innerHTML = html || esc(detail) || 'Active';
+    maybeAddToggle(body);
   } else if (comp === 'tasks') {
     let html = '';
     if (ev.task_type) html += '<code>' + esc(ev.task_type) + '</code> ';
@@ -724,29 +897,52 @@ function updateBody(comp, ev) {
     if (ev.summary) html += esc(ev.summary);
     body.innerHTML = html || esc(detail) || 'Created';
   } else if (comp === 'prep_light') {
-    body.innerHTML = ev.color ? 'Color: <code>' + esc(ev.color) + '</code> — ' + (ev.duration_seconds || '?') + 's' : esc(detail);
+    const meanings = {
+      green: 'All items verified — ready for procedure',
+      yellow: 'Review needed — check flagged issue',
+      red: 'Not ready — action required before proceeding'
+    };
+    let html = '';
+    if (ev.color) {
+      html += '<span style="font-weight:600;color:var(--' + ev.color + ',inherit)">' + esc(ev.color.toUpperCase()) + '</span>';
+      html += ' — ' + (ev.duration_seconds || '?') + 's<br>';
+      html += '<span style="font-size:.85em;opacity:.85">' + (meanings[ev.color] || 'Unknown state') + '</span>';
+    } else {
+      html = esc(detail);
+    }
+    body.innerHTML = html;
   } else if (comp === 'spd') {
     let html = '';
     if (ev.item_name) html += 'Item: <code>' + esc(ev.item_name) + '</code><br>';
     if (ev.urgency) html += 'Urgency: <code>' + esc(ev.urgency) + '</code>';
     body.innerHTML = html || esc(detail) || 'Requested';
   } else if (comp === 'vlm_local') {
-    body.innerHTML = ev.answer ? '<code>' + esc(truncate(ev.answer, 120)) + '</code>' : esc(detail) || 'Active';
-    if (ev.image_url) { const vt = document.getElementById('vlm-local-thumb'); vt.src = ev.image_url; vt.style.display = 'block'; }
+    let html = '';
+    if (ev.question) html += '<span style="color:var(--muted)">Q:</span> ' + esc(ev.question) + '<br>';
+    if (ev.answer) html += '<span style="color:var(--yellow)">A:</span> ' + esc(ev.answer);
+    body.innerHTML = html || esc(detail) || 'Active';
+    maybeAddToggle(body);
   } else if (comp === 'vlm_remote') {
-    body.innerHTML = ev.answer ? '<code>' + esc(truncate(ev.answer, 120)) + '</code>' : esc(detail) || 'Active';
-    if (ev.image_url) { const vt = document.getElementById('vlm-remote-thumb'); vt.src = ev.image_url; vt.style.display = 'block'; }
+    body.innerHTML = ev.answer ? '<code>' + esc(ev.answer) + '</code>' : esc(detail) || 'Active';
+    if (ev.image_url) { const vt = document.getElementById('vlm-remote-thumb'); if (vt) { vt.src = ev.image_url; vt.style.display = 'block'; } }
+    maybeAddToggle(body);
+  } else if (comp === 'tool_call') {
+    // Handled by activateTool — no body node for this
+    return;
   } else if (comp === 'validation') {
-    body.innerHTML = (ev.errors && ev.errors.length)
-      ? '<span style="color:var(--red)">\u26A0 ' + ev.errors.length + ' error(s)</span>'
-      : '<span style="color:var(--green)">\u2713 Passed</span>';
+    if (ev.errors && ev.errors.length) {
+      let html = '<span style="color:var(--red)">\u26A0 ' + ev.errors.length + ' error(s)</span><br>';
+      ev.errors.forEach(function(e) { html += '<span style="font-size:.62rem">• ' + esc(e) + '</span><br>'; });
+      body.innerHTML = html;
+    } else {
+      body.innerHTML = '<span style="color:var(--green)">\u2713 Passed</span>';
+    }
+    maybeAddToggle(body);
   } else if (comp === 'emr_api') {
     let html = '';
     if (ev.case_id) html += 'Case: <code>' + esc(ev.case_id) + '</code><br>';
     if (ev.procedure) html += esc(ev.procedure);
     body.innerHTML = html || esc(detail) || 'Active';
-  } else if (comp === 'resources') {
-    body.innerHTML = esc(detail) || 'Queried';
   } else {
     body.textContent = detail || 'Active';
   }
@@ -776,7 +972,7 @@ function formatComponent(c) {
   return {
     detector:'Detector', reconcile:'Reconcile', agent:'Agent',
     emr_api:'EMR API', vlm_local:'Local VLM', vlm_remote:'Remote VLM',
-    validation:'Validation',
+    validation:'Validation', tool_call:'Tool Call',
     tasks:'Tasks', prep_light:'Stack Light', spd:'SPD', resources:'Resources',
   }[c] || c;
 }

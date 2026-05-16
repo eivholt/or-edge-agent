@@ -82,7 +82,12 @@ def validate_decision(decision: dict, event: dict) -> list[str]:
             duration = args.get("duration_seconds")
             if not isinstance(duration, int) or not (1 <= duration <= 10):
                 errors.append(f"tool_calls[{i}] invalid duration_seconds")
-            if event.get("confidence", 0) < 0.8:
+            # Allow actuation below 0.8 if VLM was invoked first
+            vlm_invoked = any(
+                c.get("name") in ("inspect_scene_local", "inspect_scene_remote")
+                for c in decision.get("tool_calls", [])
+            )
+            if event.get("confidence", 0) < 0.8 and not vlm_invoked:
                 errors.append(f"tool_calls[{i}] cannot actuate below confidence 0.8")
 
     return errors

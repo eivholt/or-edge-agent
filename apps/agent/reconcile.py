@@ -44,6 +44,12 @@ def reconcile(event: dict, case: dict) -> list[dict]:
 
     missing = set(event.get("missing_or_uncertain", []))
 
+    # Confidence-based task_type: low confidence or sterile ambiguity → human_review
+    confidence = event.get("confidence", 1.0)
+    event_type = event.get("event_type", "")
+    low_confidence = confidence < 0.80 or event_type == "sterile_zone_ambiguity"
+    flagged_task_type = "human_review" if low_confidence else "missing_supply"
+
     calls: list[dict] = []
 
     for item, need in sorted(required.items()):
@@ -58,7 +64,7 @@ def reconcile(event: dict, case: dict) -> list[dict]:
                     "name": "create_synthetic_or_task",
                     "arguments": {
                         "case_id": case["case_id"],
-                        "task_type": "missing_supply",
+                        "task_type": flagged_task_type,
                         "priority": case.get("priority", "normal"),
                         "summary": (
                             f"{item} deficit: need {need}, have {have} "
@@ -70,6 +76,7 @@ def reconcile(event: dict, case: dict) -> list[dict]:
                         ),
                     },
                 })
+            # else: flagged but no deficit (have >= need) — no action needed
         elif have < need:
             # Not flagged, but count is short.
             calls.append({
@@ -90,6 +97,7 @@ def reconcile(event: dict, case: dict) -> list[dict]:
             })
 
     # Handle pathway-change events — table may look ready but procedure changed.
+    # Per protocol: ALL THREE actions are required.
     if event.get("event_type") == "visually_ready_but_pathway_changed":
         calls.append({
             "name": "create_synthetic_or_task",
@@ -99,6 +107,24 @@ def reconcile(event: dict, case: dict) -> list[dict]:
                 "priority": "high",
                 "summary": f"Procedure changed — review setup for {case.get('procedure', 'unknown')}",
                 "reason": "Surgical pathway changed after initial setup. Requires review.",
+            },
+        })
+        calls.append({
+            "name": "create_synthetic_or_task",
+            "arguments": {
+                "case_id": case["case_id"],
+                "task_type": "porter_hold",
+                "priority": "high",
+                "summary": "Hold porter — procedure changed, setup under review",
+                "reason": "Porter must wait until procedure change review is complete.",
+            },
+        })
+        calls.append({
+            "name": "set_or_prep_light",
+            "arguments": {
+                "room_id": event.get("room_id", "OR-?"),
+                "color": "yellow",
+                "duration_seconds": 10,
             },
         })
 

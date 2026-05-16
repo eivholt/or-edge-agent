@@ -101,7 +101,7 @@ start_llm() {
         --host 0.0.0.0 \
         --port "$VLLM_PORT" \
         --dtype auto \
-        --max-model-len 4096 \
+        --max-model-len 8192 \
         --gpu-memory-utilization 0.48 \
         --enable-auto-tool-choice \
         --tool-call-parser mistral \
@@ -135,12 +135,6 @@ start_dashboard() {
     nohup uvicorn apps.dashboard.server:app \
         --host 0.0.0.0 \
         --port "$DASH_PORT" \
-        --reload \
-        --reload-include '*.py' \
-        --reload-include '*.html' \
-        --reload-dir apps \
-        --reload-dir synthetic_emr \
-        --reload-dir mcp_servers \
         > "${LOG_DIR}/dashboard.log" 2>&1 &
     deactivate 2>/dev/null || true
     wait_for_port "$DASH_PORT" "Dashboard" 15

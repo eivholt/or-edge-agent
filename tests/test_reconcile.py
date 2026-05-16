@@ -182,9 +182,14 @@ def test_procedure_change_produces_review_call():
         "required_items": {"scalpel": 2, "scissors": 2, "tweezers": 2},
     }
     calls = reconcile(event, case)
-    assert len(calls) == 1
-    assert calls[0]["arguments"]["task_type"] == "procedure_change_review"
-    assert calls[0]["arguments"]["priority"] == "high"
+    assert len(calls) == 3
+    task_calls = [c for c in calls if c["name"] == "create_synthetic_or_task"]
+    light_calls = [c for c in calls if c["name"] == "set_or_prep_light"]
+    task_types = [c["arguments"]["task_type"] for c in task_calls]
+    assert "procedure_change_review" in task_types
+    assert "porter_hold" in task_types
+    assert len(light_calls) == 1
+    assert light_calls[0]["arguments"]["color"] == "yellow"
 
 
 def test_procedure_change_with_deficit():
@@ -207,6 +212,11 @@ def test_procedure_change_with_deficit():
         "required_items": {"scalpel": 2, "scissors": 2, "tweezers": 2},
     }
     calls = reconcile(event, case)
-    types = [c["arguments"]["task_type"] for c in calls]
+    task_calls = [c for c in calls if c["name"] == "create_synthetic_or_task"]
+    types = [c["arguments"]["task_type"] for c in task_calls]
     assert "missing_supply" in types, "Should flag deficits as missing_supply"
     assert "procedure_change_review" in types, "Should include procedure_change_review"
+    assert "porter_hold" in types, "Should include porter_hold"
+    light_calls = [c for c in calls if c["name"] == "set_or_prep_light"]
+    assert len(light_calls) == 1
+    assert light_calls[0]["arguments"]["color"] == "yellow"
