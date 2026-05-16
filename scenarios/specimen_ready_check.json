@@ -1,0 +1,16 @@
+{
+  "event_id": "evt-0021",
+  "room_id": "OR-2",
+  "case_id": "CASE-3001",
+  "event_type": "specimen_ready_check",
+  "visible_items": {
+    "scissors": 1,
+    "sponge": 2
+  },
+  "missing_or_uncertain": [],
+  "zone": "mayo_stand",
+  "confidence": 0.68,
+  "image_path": "frames/frame_specimen_ready.png",
+  "timestamp": "2026-05-16T10:45:00+02:00",
+  "vlm_hint": "A container resembling a specimen cup is visible near the mayo stand."
+}

@@ -15,10 +15,14 @@ class ORSceneEvent(BaseModel):
         "sterile_zone_ambiguity",
         "instrument_out_of_zone",
         "wrong_case_cart_candidate",
+        "specimen_ready_check",
+        "room_turnover_check",
+        "ppe_compliance_check",
     ]
-    visible_items: list[str]
+    visible_items: dict[str, int]
     missing_or_uncertain: list[str]
     zone: str
     confidence: float = Field(ge=0.0, le=1.0)
     image_path: str | None = None
+    vlm_hint: str | None = None
     timestamp: datetime

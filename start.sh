@@ -5,7 +5,7 @@
 #   ./start.sh llm          Start vLLM only
 #   ./start.sh emr          Start EMR API only
 #   ./start.sh dashboard    Start Dashboard only
-#   ./start.sh agent [file] Run agent fixture (default: missing_suction_tip)
+#   ./start.sh agent [file] Run agent fixture (default: missing_scissors)
 #   ./start.sh stop         Stop all services
 #
 # The dashboard auto-opens in Chrome once the server is ready.
@@ -136,6 +136,11 @@ start_dashboard() {
         --host 0.0.0.0 \
         --port "$DASH_PORT" \
         --reload \
+        --reload-include '*.py' \
+        --reload-include '*.html' \
+        --reload-dir apps \
+        --reload-dir synthetic_emr \
+        --reload-dir mcp_servers \
         > "${LOG_DIR}/dashboard.log" 2>&1 &
     deactivate 2>/dev/null || true
     wait_for_port "$DASH_PORT" "Dashboard" 15
@@ -143,7 +148,7 @@ start_dashboard() {
 }
 
 run_agent() {
-    local scenario="${1:-scenarios/missing_suction_tip.json}"
+    local scenario="${1:-scenarios/missing_scissors.json}"
     info "Running agent fixture: ${scenario}"
     source "${APP_VENV}/bin/activate"
     python -m apps.agent.run_fixture "$scenario"

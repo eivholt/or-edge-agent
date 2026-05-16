@@ -23,7 +23,7 @@
     {
       "label": "Run missing suction scenario",
       "type": "shell",
-      "command": "source .venv/bin/activate && python apps/agent/run_fixture.py scenarios/missing_suction_tip.json",
+      "command": "source .venv/bin/activate && python apps/agent/run_fixture.py scenarios/missing_scissors.json",
       "problemMatcher": []
     }
   ]

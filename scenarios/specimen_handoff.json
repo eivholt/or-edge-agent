@@ -3,12 +3,15 @@
   "room_id": "OR-2",
   "case_id": "CASE-3001",
   "event_type": "specimen_container_seen",
-  "visible_items": [
-    "specimen_cup",
-    "forceps"
-  ],
+  "visible_items": {
+    "scalpel": 2,
+    "scissors": 2,
+    "sponge": 4,
+    "tweezers": 2
+  },
   "missing_or_uncertain": [],
   "zone": "back_table",
   "confidence": 0.93,
-  "timestamp": "2026-05-11T12:10:00+02:00"
+  "image_path": "frames/frame_all_present.png",
+  "timestamp": "2026-05-15T12:10:00+02:00"
 }

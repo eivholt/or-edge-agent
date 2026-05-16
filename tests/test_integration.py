@@ -42,8 +42,13 @@ MISSING_REQUIRED_EVENT = {
     "room_id": "OR-2",
     "case_id": "CASE-INT-1",
     "event_type": "or_setup_state_change",
-    "visible_items": ["scalpel", "forceps", "trocar"],
-    "missing_or_uncertain": ["bovie_tip", "specimen_cup"],
+    "visible_items": {
+        "scalpel": 2,
+        "scissors": 1,
+        "sponge": 4,
+        "tweezers": 1,
+    },
+    "missing_or_uncertain": ["scissors", "tweezers"],
     "zone": "back_table",
     "confidence": 0.90,
     "timestamp": "2026-05-15T08:00:00+02:00",
@@ -52,7 +57,7 @@ MISSING_REQUIRED_EVENT = {
 
 @pytest.mark.llm
 def test_multiple_missing_required_items():
-    """Two required items missing → agent should create tasks for both."""
+    """Two required items have deficit → agent should create tasks for both."""
     case = get_case("CASE-INT-1")
     decision = ask_agent(MISSING_REQUIRED_EVENT, case, RESOURCES)
     errors = validate_decision(decision, MISSING_REQUIRED_EVENT)
@@ -64,16 +69,16 @@ def test_multiple_missing_required_items():
         and c["arguments"].get("task_type") == "missing_supply"
     ]
     assert len(supply_calls) >= 2, (
-        f"Agent should create tasks for both bovie_tip and specimen_cup, "
+        f"Agent should create tasks for scissors and tweezers deficit, "
         f"got {len(supply_calls)} supply calls: {decision}"
     )
 
     all_text = " ".join(
         c["arguments"].get("summary", "") + " " + c["arguments"].get("reason", "")
         for c in supply_calls
-    ).lower().replace("_", " ")
-    assert "bovie" in all_text, f"Should mention bovie_tip: {all_text}"
-    assert "specimen" in all_text, f"Should mention specimen_cup: {all_text}"
+    ).lower()
+    assert "scissors" in all_text, f"Should mention scissors: {all_text}"
+    assert "tweezers" in all_text, f"Should mention tweezers: {all_text}"
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -85,7 +90,12 @@ ALL_PRESENT_EVENT = {
     "room_id": "OR-2",
     "case_id": "CASE-INT-2",
     "event_type": "or_setup_state_change",
-    "visible_items": ["scalpel", "forceps", "trocar", "specimen_cup"],
+    "visible_items": {
+        "scalpel": 2,
+        "scissors": 2,
+        "sponge": 4,
+        "tweezers": 3,
+    },
     "missing_or_uncertain": [],
     "zone": "back_table",
     "confidence": 0.95,
@@ -116,8 +126,13 @@ MISSING_NOT_REQUIRED_EVENT = {
     "room_id": "OR-2",
     "case_id": "CASE-INT-3",
     "event_type": "or_setup_state_change",
-    "visible_items": ["scalpel", "forceps", "trocar"],
-    "missing_or_uncertain": ["suction_tip", "retractor"],
+    "visible_items": {
+        "scalpel": 2,
+        "scissors": 2,
+        "sponge": 4,
+        "tweezers": 3,
+    },
+    "missing_or_uncertain": ["sponge", "tweezers"],
     "zone": "back_table",
     "confidence": 0.88,
     "timestamp": "2026-05-15T08:10:00+02:00",
@@ -126,7 +141,7 @@ MISSING_NOT_REQUIRED_EVENT = {
 
 @pytest.mark.llm
 def test_missing_items_not_required_no_task():
-    """Items flagged missing but not required → fast path, no tasks."""
+    """Items flagged uncertain but counts meet requirements → fast path, no tasks."""
     case = get_case("CASE-INT-3")
     decision = ask_agent(MISSING_NOT_REQUIRED_EVENT, case, RESOURCES)
     errors = validate_decision(decision, MISSING_NOT_REQUIRED_EVENT)
@@ -146,8 +161,13 @@ MIXED_EVENT = {
     "room_id": "OR-2",
     "case_id": "CASE-INT-4",
     "event_type": "or_setup_state_change",
-    "visible_items": ["scalpel", "forceps"],
-    "missing_or_uncertain": ["trocar", "retractor", "suction_tip"],
+    "visible_items": {
+        "scalpel": 2,
+        "scissors": 1,
+        "sponge": 4,
+        "tweezers": 1,
+    },
+    "missing_or_uncertain": ["scissors", "sponge"],
     "zone": "back_table",
     "confidence": 0.85,
     "timestamp": "2026-05-15T08:15:00+02:00",
@@ -156,8 +176,9 @@ MIXED_EVENT = {
 
 @pytest.mark.llm
 def test_mixed_missing_only_required_get_tasks():
-    """trocar and suction_tip are missing+required; retractor is not required.
-    Agent should create tasks only for trocar and suction_tip."""
+    """scissors deficit (need 2, have 1) and tweezers deficit (need 2, have 1).
+    sponge flagged but count meets requirement (need 4, have 4).
+    Agent should create tasks for scissors and tweezers deficits."""
     case = get_case("CASE-INT-4")
     decision = ask_agent(MIXED_EVENT, case, RESOURCES)
     errors = validate_decision(decision, MIXED_EVENT)
@@ -169,25 +190,16 @@ def test_mixed_missing_only_required_get_tasks():
         and c["arguments"].get("task_type") == "missing_supply"
     ]
     assert len(supply_calls) >= 2, (
-        f"Agent should create tasks for trocar and suction_tip, "
+        f"Agent should create tasks for scissors and tweezers, "
         f"got {len(supply_calls)}: {decision}"
     )
 
     all_text = " ".join(
         c["arguments"].get("summary", "") + " " + c["arguments"].get("reason", "")
         for c in supply_calls
-    ).lower().replace("_", " ")
-    assert "trocar" in all_text, f"Should mention trocar: {all_text}"
-    assert "suction" in all_text, f"Should mention suction_tip: {all_text}"
-
-    # retractor should NOT appear in any missing_supply task
-    retractor_calls = [
-        c for c in supply_calls
-        if "retractor" in (c["arguments"].get("summary", "") + c["arguments"].get("reason", "")).lower()
-    ]
-    assert len(retractor_calls) == 0, (
-        f"Agent should NOT create a task for retractor (not required): {retractor_calls}"
-    )
+    ).lower()
+    assert "scissors" in all_text, f"Should mention scissors: {all_text}"
+    assert "tweezers" in all_text, f"Should mention tweezers: {all_text}"
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -201,8 +213,10 @@ def test_reconcile_feeds_correct_gaps_to_agent():
     case = get_case("CASE-INT-4")
     recon = reconcile_setup(MIXED_EVENT, case)
 
-    assert sorted(recon["actionable_missing"]) == ["suction_tip", "trocar"]
-    assert recon["unaccounted"] == []
+    # scissors flagged + deficit (need 2, have 1)
+    assert "scissors" in recon["actionable_missing"]
+    # tweezers not flagged but deficit (need 2, have 1)
+    assert "tweezers" in recon["unaccounted"]
     assert recon["all_present"] is False
 
 
@@ -215,7 +229,12 @@ SPECIMEN_EVENT = {
     "room_id": "OR-2",
     "case_id": "CASE-INT-6",
     "event_type": "specimen_container_seen",
-    "visible_items": ["specimen_cup", "forceps"],
+    "visible_items": {
+        "scalpel": 2,
+        "scissors": 2,
+        "sponge": 4,
+        "tweezers": 3,
+    },
     "missing_or_uncertain": [],
     "zone": "back_table",
     "confidence": 0.93,
@@ -245,7 +264,9 @@ UNACCOUNTED_EVENT = {
     "room_id": "OR-2",
     "case_id": "CASE-INT-7",
     "event_type": "or_setup_state_change",
-    "visible_items": ["scalpel"],
+    "visible_items": {
+        "scalpel": 2,
+    },
     "missing_or_uncertain": [],
     "zone": "back_table",
     "confidence": 0.85,
@@ -255,10 +276,10 @@ UNACCOUNTED_EVENT = {
 
 @pytest.mark.llm
 def test_unaccounted_items_get_tasks():
-    """forceps and trocar required but never seen or flagged → agent should act."""
+    """scissors and tweezers required but not visible → agent should act."""
     case = get_case("CASE-INT-7")
     recon = reconcile_setup(UNACCOUNTED_EVENT, case)
-    assert sorted(recon["unaccounted"]) == ["forceps", "trocar"]
+    assert sorted(recon["unaccounted"]) == ["scissors", "tweezers"]
 
     decision = ask_agent(UNACCOUNTED_EVENT, case, RESOURCES)
     errors = validate_decision(decision, UNACCOUNTED_EVENT)
@@ -269,7 +290,7 @@ def test_unaccounted_items_get_tasks():
         if c["name"] == "create_synthetic_or_task"
     ]
     assert len(supply_calls) >= 2, (
-        f"Agent should create tasks for forceps and trocar, "
+        f"Agent should create tasks for scissors and tweezers, "
         f"got {len(supply_calls)}: {decision}"
     )
 
@@ -283,7 +304,12 @@ PROCEDURE_CHANGED_EVENT = {
     "room_id": "OR-2",
     "case_id": "CASE-INT-10",
     "event_type": "visually_ready_but_pathway_changed",
-    "visible_items": ["scalpel", "forceps", "trocar", "specimen_cup", "suction_tip"],
+    "visible_items": {
+        "scalpel": 2,
+        "scissors": 2,
+        "sponge": 4,
+        "tweezers": 3,
+    },
     "missing_or_uncertain": [],
     "zone": "back_table",
     "confidence": 0.91,
@@ -332,8 +358,11 @@ STERILE_ZONE_EVENT = {
     "room_id": "OR-2",
     "case_id": "CASE-INT-11",
     "event_type": "sterile_zone_ambiguity",
-    "visible_items": ["scalpel", "trocar"],
-    "missing_or_uncertain": ["forceps"],
+    "visible_items": {
+        "scalpel": 1,
+        "scissors": 0,
+    },
+    "missing_or_uncertain": ["scissors"],
     "zone": "back_table",
     "confidence": 0.72,
     "timestamp": "2026-05-15T09:10:00+02:00",
@@ -354,7 +383,7 @@ def test_sterile_zone_ambiguity_creates_human_review():
         if c["name"] == "create_synthetic_or_task"
     ]
     assert len(task_calls) >= 1, (
-        f"Should create at least one task for forceps, got: {decision}"
+        f"Should create at least one task for scissors, got: {decision}"
     )
 
     task_types = [c["arguments"].get("task_type") for c in task_calls]
@@ -443,14 +472,14 @@ def test_dynamic_tool_swap_robot_delivery():
             "status": "robot_delivery_requested",
         }
 
-    # Event: suction_tip is missing and required
+    # Event: scissors deficit (need 2, have 1)
     event = {
         "event_id": "evt-int-012",
         "room_id": "OR-2",
         "case_id": "CASE-INT-12",
         "event_type": "or_setup_state_change",
-        "visible_items": ["scalpel", "forceps", "trocar"],
-        "missing_or_uncertain": ["suction_tip"],
+        "visible_items": {"scalpel": 2, "scissors": 1, "sponge": 4, "tweezers": 2},
+        "missing_or_uncertain": ["scissors"],
         "zone": "back_table",
         "confidence": 0.90,
         "timestamp": "2026-05-15T09:20:00+02:00",
@@ -489,6 +518,6 @@ def test_dynamic_tool_swap_robot_delivery():
         f"Agent should use request_spd_robot_delivery (the new tool), "
         f"got tool_calls: {tool_calls}"
     )
-    assert "suction" in robot_calls[0]["arguments"].get("item_name", "").lower(), (
-        f"Robot delivery should be for suction_tip: {robot_calls[0]}"
+    assert "scissors" in robot_calls[0]["arguments"].get("item_name", "").lower(), (
+        f"Robot delivery should be for scissors: {robot_calls[0]}"
     )

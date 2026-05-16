@@ -106,7 +106,7 @@ export TEXT_LLM_BASE_URL=http://localhost:8000/v1
 export TEXT_LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
 export OPENAI_API_KEY=local-dev-key
 
-python apps/agent/run_fixture.py scenarios/missing_suction_tip.json
+python apps/agent/run_fixture.py scenarios/missing_scissors.json
 
 
 ip addr

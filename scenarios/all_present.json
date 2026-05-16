@@ -1,20 +1,17 @@
 {
-  "event_id": "evt-0001",
+  "event_id": "evt-0010",
   "room_id": "OR-2",
   "case_id": "CASE-1042",
   "event_type": "or_setup_state_change",
   "visible_items": {
     "scalpel": 2,
-    "scissors": 1,
+    "scissors": 2,
     "sponge": 4,
-    "tweezers": 1
+    "tweezers": 3
   },
-  "missing_or_uncertain": [
-    "scissors",
-    "tweezers"
-  ],
+  "missing_or_uncertain": [],
   "zone": "back_table",
-  "confidence": 0.85,
-  "image_path": "frames/frame_missing_scissors.png",
+  "confidence": 0.95,
+  "image_path": "frames/frame_all_present.png",
   "timestamp": "2026-05-15T12:00:00+02:00"
 }

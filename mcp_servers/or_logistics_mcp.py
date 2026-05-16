@@ -89,25 +89,29 @@ def set_or_prep_light(room_id: str, color: str, duration_seconds: int) -> dict:
 @mcp.tool()
 def reconcile_setup(
     missing_or_uncertain: list[str],
-    required_items: list[str],
-    visible_items: list[str],
+    required_items: dict[str, int],
+    visible_items: dict[str, int],
 ) -> dict:
     """
-    Compare detected items against the surgical pathway's required items.
+    Compare detected item counts against the surgical pathway's required counts.
 
-    Returns which required items are missing and which are unaccounted for.
+    Returns which required items have a deficit and which are unaccounted for.
     Use this BEFORE deciding whether to create tasks or request resupply.
 
-    - actionable_missing: items flagged missing by the detector AND required.
-    - unaccounted: items required but neither visible nor flagged.
-    - all_present: true if every required item is visible.
+    - actionable_missing: items flagged uncertain by detector AND required with a deficit.
+    - unaccounted: items required but with insufficient visible count (not flagged).
+    - all_present: true if every required item meets its count.
     """
-    required = set(required_items)
-    visible = set(visible_items)
     missing = set(missing_or_uncertain)
+    actionable_missing = []
+    unaccounted = []
 
-    actionable_missing = sorted(missing & required)
-    unaccounted = sorted(required - visible - missing)
+    for item, need in sorted(required_items.items()):
+        have = visible_items.get(item, 0)
+        if item in missing and have < need:
+            actionable_missing.append(item)
+        elif item not in missing and have < need:
+            unaccounted.append(item)
 
     return {
         "actionable_missing": actionable_missing,

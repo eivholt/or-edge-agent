@@ -1,0 +1,13 @@
+{
+  "event_id": "evt-0023",
+  "room_id": "OR-2",
+  "case_id": "CASE-5001",
+  "event_type": "ppe_compliance_check",
+  "visible_items": {},
+  "missing_or_uncertain": [],
+  "zone": "full_room",
+  "confidence": 0.60,
+  "image_path": "frames/frame_ppe_check.png",
+  "timestamp": "2026-05-16T08:30:00+02:00",
+  "vlm_hint": "One person near the instrument table does not appear to be wearing a surgical mask."
+}

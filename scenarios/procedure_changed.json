@@ -3,15 +3,15 @@
   "room_id": "OR-2",
   "case_id": "CASE-2001",
   "event_type": "visually_ready_but_pathway_changed",
-  "visible_items": [
-    "scalpel",
-    "forceps",
-    "trocar",
-    "specimen_cup",
-    "suction_tip"
-  ],
+  "visible_items": {
+    "scalpel": 2,
+    "scissors": 2,
+    "sponge": 4,
+    "tweezers": 3
+  },
   "missing_or_uncertain": [],
   "zone": "back_table",
   "confidence": 0.91,
-  "timestamp": "2026-05-11T12:05:00+02:00"
+  "image_path": "frames/frame_procedure_changed.png",
+  "timestamp": "2026-05-15T12:05:00+02:00"
 }

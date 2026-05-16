@@ -26,6 +26,9 @@ VLM_TRIGGER_EVENT_TYPES = {
     "instrument_out_of_zone",
     "sterile_zone_ambiguity",
     "wrong_case_cart_candidate",
+    "specimen_ready_check",
+    "room_turnover_check",
+    "ppe_compliance_check",
 }
 
 

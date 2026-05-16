@@ -15,13 +15,12 @@ CASES = {
         "procedure": "synthetic laparoscopic biopsy",
         "phase": "pre_op_setup",
         "priority": "normal",
-        "required_items": [
-            "scalpel",
-            "forceps",
-            "trocar",
-            "suction_tip",
-            "specimen_cup"
-        ],
+        "required_items": {
+            "scalpel": 2,
+            "scissors": 2,
+            "sponge": 4,
+            "tweezers": 2
+        },
         "open_items": [
             "porter_not_released",
             "pathology_handoff_task_not_created"
@@ -34,14 +33,12 @@ CASES = {
         "procedure": "synthetic open conversion preparedness pathway",
         "phase": "procedure_changed_after_setup",
         "priority": "high",
-        "required_items": [
-            "scalpel",
-            "forceps",
-            "open_retractor",
-            "additional_clamps",
-            "suction_tip",
-            "specimen_cup"
-        ],
+        "required_items": {
+            "scalpel": 2,
+            "scissors": 2,
+            "sponge": 4,
+            "tweezers": 2
+        },
         "open_items": [
             "updated_setup_not_confirmed",
             "porter_not_released"
@@ -54,9 +51,10 @@ CASES = {
         "procedure": "synthetic biopsy",
         "phase": "case_closing_candidate",
         "priority": "normal",
-        "required_items": [
-            "specimen_cup"
-        ],
+        "required_items": {
+            "scissors": 1,
+            "sponge": 2
+        },
         "open_items": [
             "pathology_handoff_task_not_created"
         ],
@@ -70,7 +68,7 @@ CASES = {
         "procedure": "synthetic laparoscopic cholecystectomy",
         "phase": "pre_op_setup",
         "priority": "normal",
-        "required_items": ["scalpel", "forceps", "trocar", "bovie_tip", "specimen_cup"],
+        "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -80,7 +78,7 @@ CASES = {
         "procedure": "synthetic minor excision",
         "phase": "pre_op_setup",
         "priority": "normal",
-        "required_items": ["scalpel", "forceps", "trocar", "specimen_cup"],
+        "required_items": {"scalpel": 1, "scissors": 1, "sponge": 2},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -90,7 +88,7 @@ CASES = {
         "procedure": "synthetic wound closure",
         "phase": "pre_op_setup",
         "priority": "normal",
-        "required_items": ["scalpel", "forceps", "trocar"],
+        "required_items": {"scalpel": 1, "scissors": 1},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -100,7 +98,7 @@ CASES = {
         "procedure": "synthetic laparoscopic biopsy",
         "phase": "pre_op_setup",
         "priority": "high",
-        "required_items": ["scalpel", "forceps", "trocar", "suction_tip"],
+        "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -110,7 +108,7 @@ CASES = {
         "procedure": "synthetic biopsy",
         "phase": "intra_op",
         "priority": "normal",
-        "required_items": ["specimen_cup", "forceps"],
+        "required_items": {"scissors": 1, "sponge": 2},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -120,7 +118,7 @@ CASES = {
         "procedure": "synthetic appendectomy",
         "phase": "pre_op_setup",
         "priority": "normal",
-        "required_items": ["scalpel", "forceps", "trocar"],
+        "required_items": {"scalpel": 2, "scissors": 2, "tweezers": 2},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -130,7 +128,7 @@ CASES = {
         "procedure": "synthetic laparoscopic cholecystectomy (changed from appendectomy)",
         "phase": "pre_op_setup",
         "priority": "high",
-        "required_items": ["scalpel", "forceps", "trocar", "specimen_cup", "suction_tip"],
+        "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -140,7 +138,7 @@ CASES = {
         "procedure": "synthetic minor excision",
         "phase": "pre_op_setup",
         "priority": "normal",
-        "required_items": ["scalpel", "trocar", "forceps"],
+        "required_items": {"scalpel": 1, "scissors": 1},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -150,7 +148,7 @@ CASES = {
         "procedure": "synthetic laparoscopic biopsy",
         "phase": "pre_op_setup",
         "priority": "normal",
-        "required_items": ["scalpel", "forceps", "trocar", "suction_tip"],
+        "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -161,7 +159,7 @@ CASES = {
         "procedure": "synthetic minor excision",
         "phase": "pre_op_setup",
         "priority": "normal",
-        "required_items": ["scalpel", "forceps", "trocar", "specimen_cup"],
+        "required_items": {"scalpel": 1, "scissors": 1, "sponge": 2},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -171,7 +169,7 @@ CASES = {
         "procedure": "synthetic laparoscopic biopsy",
         "phase": "pre_op_setup",
         "priority": "normal",
-        "required_items": ["scalpel", "forceps", "trocar", "specimen_cup", "suction_tip"],
+        "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
         "open_items": [],
         "porter_release_allowed": False,
     },
@@ -182,8 +180,39 @@ CASES = {
         "procedure": "synthetic minor excision",
         "phase": "pre_op_setup",
         "priority": "normal",
-        "required_items": ["scalpel", "forceps", "scissors"],
+        "required_items": {"scalpel": 1, "scissors": 2},
         "open_items": [],
+        "porter_release_allowed": False,
+    },
+    # ── VLM scene-understanding cases ────────────────────────────────
+    "CASE-4001": {
+        "case_id": "CASE-4001",
+        "patient_id": "SYN-PAT-4001",
+        "procedure": "synthetic laparoscopic cholecystectomy (turnover pending)",
+        "phase": "room_turnover",
+        "priority": "normal",
+        "required_items": {
+            "scalpel": 2,
+            "scissors": 2,
+            "sponge": 4,
+            "tweezers": 2,
+        },
+        "open_items": ["previous_case_equipment_not_cleared"],
+        "porter_release_allowed": False,
+    },
+    "CASE-5001": {
+        "case_id": "CASE-5001",
+        "patient_id": "SYN-PAT-5001",
+        "procedure": "synthetic laparoscopic biopsy",
+        "phase": "pre_op_setup",
+        "priority": "normal",
+        "required_items": {
+            "scalpel": 2,
+            "scissors": 2,
+            "sponge": 4,
+            "tweezers": 2,
+        },
+        "open_items": ["ppe_compliance_not_verified"],
         "porter_release_allowed": False,
     },
 }

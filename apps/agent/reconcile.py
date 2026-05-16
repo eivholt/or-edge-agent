@@ -1,8 +1,9 @@
 """Reconcile a detector event against a synthetic surgical pathway.
 
 Pure logic — no LLM, no network.  Compares what the detector sees
-(visible / missing_or_uncertain) with what the pathway says is required
-and returns a list of proposed tool-call dicts the agent should consider.
+(visible counts / missing_or_uncertain) with what the pathway says is
+required (item → count) and returns a list of proposed tool-call dicts
+the agent should consider.
 """
 
 from __future__ import annotations
@@ -14,44 +15,79 @@ import logfire
 def reconcile(event: dict, case: dict) -> list[dict]:
     """Return proposed tool_calls for the gap between *event* and *case*.
 
+    Supports quantity-aware comparison:
+      - ``required_items`` may be ``dict[str, int]`` (item → count)
+        or ``list[str]`` (each entry counts as 1).
+      - ``visible_items`` may be ``dict[str, int]`` (item → count)
+        or ``list[str]`` (each entry counts as 1).
+
     Each returned dict has the shape expected by ``validate_decision``:
     ``{"name": "...", "arguments": {...}}``.
     """
-    required = set(case.get("required_items", []))
-    visible = set(event.get("visible_items", []))
+    # Normalise required_items to dict[str, int]
+    raw_required = case.get("required_items", [])
+    if isinstance(raw_required, dict):
+        required = dict(raw_required)
+    else:
+        required: dict[str, int] = {}
+        for item in raw_required:
+            required[item] = required.get(item, 0) + 1
+
+    # Normalise visible_items to dict[str, int]
+    raw_visible = event.get("visible_items", [])
+    if isinstance(raw_visible, dict):
+        visible = dict(raw_visible)
+    else:
+        visible: dict[str, int] = {}
+        for item in raw_visible:
+            visible[item] = visible.get(item, 0) + 1
+
     missing = set(event.get("missing_or_uncertain", []))
-
-    # Items the detector flagged as missing *and* the pathway actually needs.
-    actionable_missing = missing & required
-
-    # Items the pathway needs that are neither visible nor flagged.
-    unaccounted = required - visible - missing
 
     calls: list[dict] = []
 
-    for item in sorted(actionable_missing):
-        calls.append({
-            "name": "create_synthetic_or_task",
-            "arguments": {
-                "case_id": case["case_id"],
-                "task_type": "missing_supply",
-                "priority": case.get("priority", "normal"),
-                "summary": f"{item} missing from {event.get('zone', 'unknown zone')}",
-                "reason": f"Detector flagged {item} as missing/uncertain and pathway requires it.",
-            },
-        })
+    for item, need in sorted(required.items()):
+        have = visible.get(item, 0)
+        flagged = item in missing
 
-    for item in sorted(unaccounted):
-        calls.append({
-            "name": "create_synthetic_or_task",
-            "arguments": {
-                "case_id": case["case_id"],
-                "task_type": "missing_supply",
-                "priority": case.get("priority", "normal"),
-                "summary": f"{item} not yet seen in {event.get('zone', 'unknown zone')}",
-                "reason": f"Pathway requires {item} but detector has not reported it.",
-            },
-        })
+        if flagged:
+            # Detector explicitly flagged this item as uncertain.
+            deficit = max(0, need - have)
+            if deficit > 0:
+                calls.append({
+                    "name": "create_synthetic_or_task",
+                    "arguments": {
+                        "case_id": case["case_id"],
+                        "task_type": "missing_supply",
+                        "priority": case.get("priority", "normal"),
+                        "summary": (
+                            f"{item} deficit: need {need}, have {have} "
+                            f"in {event.get('zone', 'unknown zone')}"
+                        ),
+                        "reason": (
+                            f"Detector flagged {item} as uncertain. "
+                            f"Required {need}, visible {have}."
+                        ),
+                    },
+                })
+        elif have < need:
+            # Not flagged, but count is short.
+            calls.append({
+                "name": "create_synthetic_or_task",
+                "arguments": {
+                    "case_id": case["case_id"],
+                    "task_type": "missing_supply",
+                    "priority": case.get("priority", "normal"),
+                    "summary": (
+                        f"{item} deficit: need {need}, have {have} "
+                        f"in {event.get('zone', 'unknown zone')}"
+                    ),
+                    "reason": (
+                        f"Pathway requires {need} {item} but detector "
+                        f"sees only {have}."
+                    ),
+                },
+            })
 
     # Handle pathway-change events — table may look ready but procedure changed.
     if event.get("event_type") == "visually_ready_but_pathway_changed":

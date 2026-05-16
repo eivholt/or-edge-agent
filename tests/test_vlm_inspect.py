@@ -28,8 +28,8 @@ def test_vlm_identifies_instruments():
     """Azure gpt-4o should identify surgical instruments in the image."""
     result = ask_vlm(IMAGE_PATH, "List the surgical instruments visible. Be brief.")
     lower = result.lower()
-    # The image shows scalpels, scissors, forceps — at least some should be identified
-    found = sum(1 for kw in ["scalpel", "scissor", "forceps"] if kw in lower)
+    # The image shows scalpels, scissors, sponges, tweezers — at least some should be identified
+    found = sum(1 for kw in ["scalpel", "scissor", "sponge", "tweezer"] if kw in lower)
     assert found >= 2, f"VLM should identify at least 2 instrument types, got: {result}"
 
 
@@ -42,7 +42,10 @@ EVENT_UNCERTAIN = {
     "room_id": "OR-2",
     "case_id": "CASE-VLM",
     "event_type": "sterile_zone_ambiguity",
-    "visible_items": ["scalpel", "forceps"],
+    "visible_items": {
+        "scalpel": 1,
+        "scissors": 0,
+    },
     "missing_or_uncertain": ["scissors"],
     "zone": "back_table",
     "confidence": 0.82,

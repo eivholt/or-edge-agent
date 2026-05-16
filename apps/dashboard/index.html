@@ -225,6 +225,12 @@
     border-radius: 6px; margin-top: .4rem; border: 1px solid var(--border);
   }
 
+  /* ── Detection overlay ──────────────────────────────── */
+  .detection-overlay {
+    display: none; width: 100%; border-radius: 6px;
+    margin-top: .4rem; border: 1px solid var(--border);
+  }
+
   /* ── Sidebar ────────────────────────────────────────── */
   .sidebar h2 { font-size: .85rem; font-weight: 600; margin-bottom: .75rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
   .event-log { display: flex; flex-direction: column; gap: .5rem; }
@@ -380,9 +386,10 @@
               <div class="node-icon"></div>
               <div>
                 <div class="node-title">Object Detection Model</div>
-                <div class="node-subtitle">Detects equipment, people, anomalies</div>
+                <div class="node-subtitle">Edge Impulse · scalpel, scissors, sponge, tweezers</div>
               </div>
             </div>
+            <img id="detectorOverlay" class="detection-overlay" src="" style="display:none" alt="Detection overlay">
             <div class="node-body" id="body-detector">Waiting for events…</div>
           </div>
 
@@ -522,10 +529,15 @@
   <div class="sidebar">
     <h2>Quick Scenarios</h2>
     <div class="scenario-bar">
-      <button class="scenario-btn" onclick="runScenario('missing_suction_tip')">Missing Suction Tip</button>
+      <button class="scenario-btn" onclick="runScenario('missing_scissors')">Missing Scissors</button>
+      <button class="scenario-btn" onclick="runScenario('all_present')">All Present</button>
       <button class="scenario-btn" onclick="runScenario('procedure_changed')">Procedure Changed</button>
       <button class="scenario-btn" onclick="runScenario('specimen_handoff')">Specimen Handoff</button>
       <button class="scenario-btn" onclick="runScenario('sterile_zone_ambiguity')">Sterile Zone Ambiguity</button>
+      <button class="scenario-btn" onclick="runScenario('instrument_out_of_zone')" style="border-color:#818cf8">🔍 Instrument Out of Zone</button>
+      <button class="scenario-btn" onclick="runScenario('specimen_ready_check')" style="border-color:#818cf8">🔍 Specimen Ready</button>
+      <button class="scenario-btn" onclick="runScenario('room_turnover_check')" style="border-color:#818cf8">🔍 Room Turnover</button>
+      <button class="scenario-btn" onclick="runScenario('ppe_compliance_check')" style="border-color:#818cf8">🔍 PPE Compliance</button>
     </div>
     <h2>Event Log</h2>
     <div class="event-log" id="eventLog"></div>
@@ -605,6 +617,7 @@ function handleEvent(ev) {
   updateBody(comp, ev);
   if (comp === 'prep_light' && ev.color) setLight(ev.color);
   if (comp === 'detector' && ev.image_url) showDetectorImage(ev.image_url);
+  if (comp === 'detector' && ev.detection_image_url) showDetectionOverlay(ev.detection_image_url);
   addLog(ev);
 }
 
@@ -615,6 +628,13 @@ function showDetectorImage(url) {
   detectorImageWrap.classList.add('active');
   clearTimeout(detectorImageWrap._timer);
   detectorImageWrap._timer = setTimeout(() => detectorImageWrap.classList.remove('active'), 3000);
+}
+
+function showDetectionOverlay(url) {
+  const overlay = document.getElementById('detectorOverlay');
+  if (!overlay) return;
+  overlay.src = url;
+  overlay.style.display = 'block';
 }
 
 function activateNode(comp) {
@@ -674,8 +694,16 @@ function updateBody(comp, ev) {
     let html = '';
     if (ev.event_type) html += 'Type: <code>' + esc(ev.event_type) + '</code><br>';
     if (ev.confidence != null) html += 'Confidence: <code>' + ev.confidence + '</code><br>';
-    if (ev.visible_items) html += 'Visible: <code>' + esc(ev.visible_items.join(', ')) + '</code><br>';
-    if (ev.missing_items && ev.missing_items.length) html += 'Missing: <code>' + esc(ev.missing_items.join(', ')) + '</code>';
+    if (ev.visible_items) {
+      if (typeof ev.visible_items === 'object' && !Array.isArray(ev.visible_items)) {
+        const items = Object.entries(ev.visible_items).map(([k,v]) => k + ': ' + v).join(', ');
+        html += 'Detected: <code>' + esc(items) + '</code><br>';
+      } else {
+        html += 'Visible: <code>' + esc(ev.visible_items.join(', ')) + '</code><br>';
+      }
+    }
+    if (ev.missing_items && ev.missing_items.length) html += 'Missing: <code>' + esc(ev.missing_items.join(', ')) + '</code><br>';
+    if (ev.inference_ms != null) html += 'Inference: <code>' + ev.inference_ms.toFixed(0) + ' ms</code>';
     body.innerHTML = html || esc(detail) || 'Active';
   } else if (comp === 'reconcile') {
     let html = '';
@@ -746,10 +774,10 @@ function addLog(ev) {
 
 function formatComponent(c) {
   return {
-    detector:'\uD83D\uDCF7 Detector', reconcile:'\u2696\uFE0F Reconcile', agent:'\uD83E\uDD16 Agent',
-    emr_api:'\uD83C\uDFE5 EMR API', vlm_local:'\uD83D\uDC41\uFE0F Local VLM', vlm_remote:'\u2601\uFE0F Remote VLM',
-    validation:'\uD83D\uDEE1\uFE0F Validation',
-    tasks:'\uD83D\uDCCB Tasks', prep_light:'\uD83D\uDCA1 Stack Light', spd:'\uD83D\uDE9A SPD', resources:'\uD83D\uDCE6 Resources',
+    detector:'Detector', reconcile:'Reconcile', agent:'Agent',
+    emr_api:'EMR API', vlm_local:'Local VLM', vlm_remote:'Remote VLM',
+    validation:'Validation',
+    tasks:'Tasks', prep_light:'Stack Light', spd:'SPD', resources:'Resources',
   }[c] || c;
 }
 

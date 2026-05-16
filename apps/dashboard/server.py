@@ -84,7 +84,7 @@ async def list_cases():
     import httpx
     try:
         # The EMR API doesn't have a list endpoint, so we use known case IDs
-        case_ids = ["CASE-1042", "CASE-2001", "CASE-3001"]
+        case_ids = ["CASE-1042", "CASE-2001", "CASE-3001", "CASE-4001", "CASE-5001"]
         cases = []
         async with httpx.AsyncClient() as client:
             for cid in case_ids:
@@ -192,7 +192,6 @@ def _run_pipeline(scenario_path: str):
     """Execute the full agent pipeline, emitting events at each step."""
     import httpx
 
-    from apps.agent.reconcile import reconcile
     from apps.agent.validation import validate_decision
 
     # 1. Load event
@@ -201,22 +200,44 @@ def _run_pipeline(scenario_path: str):
 
     # Find matching frame image
     image_url = None
-    frame = DATA_DIR / "frames" / f"frame_{scenario_name}.jpg"
-    if frame.exists():
-        image_url = f"/data/frames/frame_{scenario_name}.jpg"
-    else:
+    frame = None
+    for ext in (".png", ".jpg", ".jpeg"):
+        candidate = DATA_DIR / "frames" / f"frame_{scenario_name}{ext}"
+        if candidate.exists():
+            frame = candidate
+            image_url = f"/data/frames/frame_{scenario_name}{ext}"
+            break
+    if frame is None:
         # Fallback: use first available image
         for p in DATA_DIR.rglob("*.jpg"):
             image_url = f"/data/{p.relative_to(DATA_DIR)}"
             break
 
+    # Run Edge Impulse object detection (if model is available)
+    detection_image_url = None
+    inference_ms = None
+    detected_labels = []
+    if frame is not None and frame.exists():
+        from apps.detector.inference import detect
+        det_result = detect(frame)
+        if det_result.annotated_path:
+            detection_image_url = f"/data/{det_result.annotated_path}"
+            inference_ms = det_result.inference_ms
+            detected_labels = [d.label for d in det_result.detections]
+
+    visible = event.get("visible_items", {})
+    total_visible = sum(visible.values()) if isinstance(visible, dict) else len(visible)
+
     _emit("detector",
           event_type=event.get("event_type"),
           confidence=event.get("confidence"),
-          visible_items=event.get("visible_items", []),
+          visible_items=visible,
           missing_items=event.get("missing_or_uncertain", []),
           image_url=image_url,
-          detail=f"Detected {len(event.get('visible_items', []))} items, "
+          detection_image_url=detection_image_url,
+          inference_ms=inference_ms,
+          detected_labels=detected_labels,
+          detail=f"Detected {total_visible} items, "
                  f"{len(event.get('missing_or_uncertain', []))} uncertain")
 
     # 2. Fetch case from EMR
@@ -230,16 +251,8 @@ def _run_pipeline(scenario_path: str):
           detail=f"Fetched case {case_id}: {case.get('procedure', '?')}")
 
     # 3. Reconcile
-    calls = reconcile(event, case)
-    required = set(case.get("required_items", []))
-    visible = set(event.get("visible_items", []))
-    missing = set(event.get("missing_or_uncertain", []))
-    recon = {
-        "actionable_missing": sorted(missing & required),
-        "unaccounted": sorted(required - visible - missing),
-        "all_present": len(calls) == 0,
-        "proposed_tool_calls": calls,
-    }
+    from apps.agent.run_fixture import reconcile_setup
+    recon = reconcile_setup(event, case)
     _emit("reconcile",
           all_present=recon["all_present"],
           actionable_missing=recon["actionable_missing"],

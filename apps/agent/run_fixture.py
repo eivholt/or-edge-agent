@@ -41,8 +41,8 @@ observations against the surgical pathway's required items. Trust the
 reconciliation — do NOT second-guess it or re-derive the gap list.
 
 If reconciliation shows no gaps (actionable_missing and unaccounted are both
-empty) AND no proposed_tool_calls, respond with a short summary and do not
-call any tools.
+empty AND all_present is true) AND no proposed_tool_calls, set the prep light
+to green and respond with a short summary confirming readiness.
 
 For each item in actionable_missing, call create_synthetic_or_task with
 task_type="missing_supply" — UNLESS the event indicates uncertainty
@@ -55,11 +55,29 @@ task_type="missing_supply".
 Visual inspection rules:
 - If the event has an image_path AND the confidence is low (< 0.80) or
   the event_type is one of (sterile_zone_ambiguity, instrument_out_of_zone,
-  wrong_case_cart_candidate), call inspect_scene_local FIRST to visually
+  wrong_case_cart_candidate, specimen_ready_check, room_turnover_check,
+  ppe_compliance_check), call inspect_scene_local FIRST to visually
   verify before creating tasks.
 - Only call inspect_scene_remote (Azure gpt-4o) if the local VLM is
   unavailable or if its answer is inconclusive.  It is a costly cloud
   fallback — use it as a last resort.
+
+VLM scene-understanding event types (always inspect_scene_local first):
+- instrument_out_of_zone: Ask "Are any surgical instruments outside the
+  sterile drape boundary? Describe which instruments and their positions."
+  If yes → create_synthetic_or_task with task_type="human_review",
+  priority="high". Set prep light yellow.
+- specimen_ready_check: Ask "Is there a labeled specimen container ready
+  for pickup on or near the mayo stand?" If yes → create_synthetic_or_task
+  with task_type="specimen_handoff". If unclear → task_type="human_review".
+- room_turnover_check: Ask "Is there still patient equipment (bed, gurney,
+  IV pole, monitors) from the previous case in this OR?" If yes →
+  create_synthetic_or_task with task_type="porter_hold", summary describing
+  what remains. Set prep light red.
+- ppe_compliance_check: Ask "Are all visible personnel wearing required
+  surgical PPE (cap, mask, gown)?" If non-compliant →
+  create_synthetic_or_task with task_type="human_review", priority="high".
+  Set prep light yellow.
 
 Tool routing rules:
 - For a confirmed missing required item → create_synthetic_or_task with task_type="missing_supply".
@@ -309,14 +327,42 @@ def get_resources(room_id: str) -> dict:
 def reconcile_setup(event: dict, case: dict) -> dict:
     """Run deterministic reconciliation — no LLM needed."""
     calls = reconcile(event, case)
-    required = set(case.get("required_items", []))
-    visible = set(event.get("visible_items", []))
+
+    # Normalise required_items to dict[str, int]
+    raw_required = case.get("required_items", [])
+    if isinstance(raw_required, dict):
+        required = dict(raw_required)
+    else:
+        required = {}
+        for item in raw_required:
+            required[item] = required.get(item, 0) + 1
+
+    # Normalise visible_items to dict[str, int]
+    raw_visible = event.get("visible_items", [])
+    if isinstance(raw_visible, dict):
+        visible = dict(raw_visible)
+    else:
+        visible = {}
+        for item in raw_visible:
+            visible[item] = visible.get(item, 0) + 1
+
     missing = set(event.get("missing_or_uncertain", []))
 
+    # Items where detector flagged uncertain AND pathway needs them
+    actionable_missing = sorted(item for item in missing if item in required)
+
+    # Items with count deficit (need > have) that weren't flagged
+    unaccounted = sorted(
+        item for item, need in required.items()
+        if item not in missing and visible.get(item, 0) < need
+    )
+
+    truly_clear = len(calls) == 0 and not actionable_missing and not unaccounted
+
     return {
-        "actionable_missing": sorted(missing & required),
-        "unaccounted": sorted(required - visible - missing),
-        "all_present": len(calls) == 0,
+        "actionable_missing": actionable_missing,
+        "unaccounted": unaccounted,
+        "all_present": truly_clear,
         "proposed_tool_calls": calls,
     }
 
@@ -324,14 +370,6 @@ def reconcile_setup(event: dict, case: dict) -> dict:
 @logfire.instrument("ask_agent case_id={case[case_id]} event_type={event[event_type]}")
 def ask_agent(event: dict, case: dict, resources: dict) -> dict:
     recon = reconcile_setup(event, case)
-
-    # Fast path: no gaps → no LLM call needed
-    if recon["all_present"]:
-        return {
-            "decision_summary": "All required items are present. No action needed.",
-            "tool_calls": [],
-            "requires_human_review": False,
-        }
 
     deps = AgentDeps(
         event=event,
