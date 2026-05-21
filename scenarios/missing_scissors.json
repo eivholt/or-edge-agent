@@ -7,7 +7,8 @@
     "scalpel": 2,
     "scissors": 1,
     "sponge": 4,
-    "tweezers": 1
+    "tweezers": 1,
+    "suction_tip": 1
   },
   "missing_or_uncertain": [
     "scissors",
@@ -15,6 +16,6 @@
   ],
   "zone": "back_table",
   "confidence": 0.85,
-  "image_path": "frames/frame_missing_scissors.png",
+  "image_path": "frames/frame_missing_scissors.jpg",
   "timestamp": "2026-05-15T12:00:00+02:00"
 }

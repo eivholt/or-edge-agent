@@ -19,7 +19,8 @@ CASES = {
             "scalpel": 2,
             "scissors": 2,
             "sponge": 4,
-            "tweezers": 2
+            "tweezers": 2,
+            "suction_tip": 1
         },
         "open_items": [
             "porter_not_released",

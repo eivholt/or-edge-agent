@@ -37,7 +37,7 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 1rem 2rem;
+    padding: .65rem 2rem;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
   }
@@ -52,28 +52,29 @@
     display: grid;
     grid-template-columns: 1fr 360px;
     gap: 0;
-    height: calc(100vh - 57px - 52px);
+    height: calc(100vh - 42px - 40px);
   }
-  .diagram-pane { padding: 1.5rem; overflow: auto; }
+  .diagram-pane { padding: 1rem; overflow: auto; }
   .sidebar { border-left: 1px solid var(--border); background: var(--surface); overflow-y: auto; padding: 1rem; }
 
-  /* ── Diagram 5-column grid ──────────────────────────── */
+  /* ── Diagram grid ────────────────────────────────────── */
   .diagram {
     display: grid;
-    grid-template-columns: 170px 44px 1fr 44px 195px;
+    grid-template-columns: 214px 1fr 44px 195px;
     grid-template-rows: auto;
-    gap: 1rem 0;
+    gap: .5rem 0;
     max-width: 1100px;
     margin: 0 auto;
     align-items: start;
   }
 
   /* ── Zone containers ────────────────────────────────── */
-  .zone-camera  { grid-column: 1; grid-row: 1; }
-  .connector-l  { grid-column: 2; grid-row: 1; }
-  .zone-edge    { grid-column: 3; grid-row: 1; }
-  .connector-r  { grid-column: 4; grid-row: 1; }
-  .zone-mcp     { grid-column: 5; grid-row: 1; }
+  .left-section { grid-column: 1; grid-row: 1; display: flex; align-self: stretch; }
+  .zone-camera  { flex: 0 0 170px; }
+  .connector-l  { flex: 0 0 44px; }
+  .zone-edge    { grid-column: 2; grid-row: 1; }
+  .connector-r  { grid-column: 3; grid-row: 1; }
+  .zone-mcp     { grid-column: 4; grid-row: 1; align-self: stretch; }
 
   .zone-label {
     font-size: .65rem; font-weight: 700; text-transform: uppercase;
@@ -82,11 +83,11 @@
   .zone-label-icon { font-size: .75rem; }
 
   /* ── Camera Zone ────────────────────────────────────── */
-  .zone-camera { display: flex; flex-direction: column; padding-top: .5rem; gap: .75rem; }
+  .zone-camera { display: flex; flex-direction: column; padding-top: .5rem; gap: .5rem; }
   .zone-camera .zone-label { color: var(--orange); }
   .detector-image-wrap {
     background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    overflow: hidden; flex: 1; min-height: 180px;
+    overflow: hidden; width: 170px; height: 170px; flex-shrink: 0;
     display: flex; align-items: center; justify-content: center;
     transition: border-color .3s, box-shadow .4s;
   }
@@ -108,6 +109,15 @@
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     gap: .2rem; padding-top: 3rem;
   }
+  .connector-l {
+    justify-content: space-between; padding-top: 1rem; padding-bottom: .5rem;
+  }
+  .connector-r {
+    align-self: stretch; justify-content: flex-start; padding-top: 0;
+  }
+  .conn-group {
+    display: flex; flex-direction: column; align-items: center; gap: .2rem;
+  }
   .conn-arrow { font-size: 1.2rem; color: var(--border); transition: color .3s; line-height: 1; }
   .conn-arrow.active { color: var(--accent); }
   .conn-label {
@@ -121,59 +131,83 @@
     border: 2px dashed var(--edge-border);
     border-radius: 16px;
     background: var(--edge-bg);
-    padding: 1rem 1.25rem 1.25rem;
+    padding: .75rem 1rem 1rem;
     box-shadow: 0 0 40px rgba(99,102,241,.04);
     position: relative;
   }
   .edge-header {
     display: flex; align-items: center; gap: .6rem;
-    margin-bottom: .75rem; padding-bottom: .6rem;
+    margin-bottom: .5rem; padding-bottom: .4rem;
     border-bottom: 1px solid rgba(99,102,241,.12);
   }
   .edge-icon { font-size: 1.3rem; }
   .edge-header .zone-label { color: var(--accent); margin-bottom: 0; }
   .edge-subtitle { font-size: .6rem; color: var(--muted); margin-top: .1rem; }
-  .edge-pipeline { display: flex; flex-direction: column; gap: .6rem; }
-  .edge-bottom-row { display: flex; gap: .6rem; }
-  .edge-bottom-row .node { flex: 1; }
+  .edge-pipeline { display: flex; flex-direction: column; gap: .35rem; }
+
+  /* ── Visual Events group ──────────────────────────── */
+  .visual-events {
+    border: 1.5px dashed var(--border);
+    border-radius: 10px;
+    padding: .4rem .55rem .55rem;
+    display: flex; flex-direction: column; gap: .3rem;
+  }
+  .ve-label {
+    font-size: .55rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; color: var(--orange); margin-bottom: .1rem;
+  }
+  .visual-events .flow-arrow { font-size: .7rem; padding: 0; }
+
+  .edge-bottom-row { display: flex; gap: .4rem; }
+  .edge-bottom-row .node { flex: 1; min-width: 0; }
 
   /* ── MCP Zone → External APIs Zone ────────────────── */
-  .zone-mcp { display: flex; flex-direction: column; padding-top: .5rem; }
+  .zone-mcp { display: flex; flex-direction: column; padding-top: .5rem; justify-content: flex-end; }
   .zone-mcp .zone-label { color: var(--cyan); }
   .mcp-stack { display: flex; flex-direction: column; gap: .6rem; }
 
   /* ── Nodes ──────────────────────────────────────────── */
   .node {
     background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
-    padding: .7rem .85rem; position: relative;
+    padding: .45rem .7rem; position: relative;
     transition: border-color .3s, box-shadow .4s, transform .2s; cursor: default;
   }
   .node:hover { transform: translateY(-1px); }
   .node.active { border-color: var(--accent); box-shadow: 0 0 18px var(--accent-glow), 0 0 50px rgba(99,102,241,.06); }
   .node.active .node-icon { animation: pulse-icon .8s ease-out; }
+  .node.thinking { border-color: var(--orange); box-shadow: 0 0 18px rgba(249,115,22,.25), 0 0 50px rgba(249,115,22,.08); animation: think-pulse 1.6s ease-in-out infinite; }
+  @keyframes think-pulse { 0%,100%{ box-shadow: 0 0 12px rgba(249,115,22,.18); } 50%{ box-shadow: 0 0 24px rgba(249,115,22,.35), 0 0 50px rgba(249,115,22,.10); } }
   @keyframes pulse-icon { 0%{transform:scale(1)} 50%{transform:scale(1.15)} 100%{transform:scale(1)} }
-  .node-header { display: flex; align-items: center; gap: .45rem; margin-bottom: .35rem; }
-  .node-icon {
-    width: 24px; height: 24px; border-radius: 6px;
-    display: flex; align-items: center; justify-content: center;
-    font-size: .75rem; flex-shrink: 0;
-  }
+  .node-header { display: flex; align-items: center; gap: .45rem; margin-bottom: .2rem; }
+  .node-icon { display: none; }
   .node-title { font-size: .75rem; font-weight: 600; line-height: 1.2; }
   .node-subtitle { font-size: .6rem; color: var(--muted); margin-top: .1rem; }
   .node-body {
-    font-size: .68rem; color: var(--muted); line-height: 1.5; margin-top: .35rem;
-    max-height: 150px; overflow: hidden; position: relative;
+    font-size: .68rem; color: var(--muted); line-height: 1.5; margin-top: .25rem;
+    max-height: 80px; overflow: hidden; position: relative;
   }
+  #body-agent { max-height: 120px; }
   .node-body.expanded { max-height: none; overflow: visible; }
   .node-body code {
-    background: rgba(255,255,255,.06); padding: .1em .3em; border-radius: 4px;
+    background: rgba(255,255,255,.08); padding: .1em .3em; border-radius: 4px;
     font-size: .64rem; font-family: 'JetBrains Mono','Fira Code',monospace;
+    color: #d4d4d8;
   }
   .body-toggle {
     display: none; font-size: .6rem; color: var(--accent); cursor: pointer;
     margin-top: .2rem; user-select: none; opacity: .8;
   }
   .body-toggle:hover { opacity: 1; text-decoration: underline; }
+
+  /* ── Validation checklist ─────────────────────────── */
+  .val-checks { list-style: none; padding: 0; margin: .25rem 0 0; font-size: .55rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0 .15rem; line-height: 1.5; }
+  .val-checks li::before { content: '○ '; opacity: .5; }
+  .val-checks li::after { content: ' |'; opacity: .3; }
+  .val-checks li:last-child::after { content: ''; }
+  .val-checks li.pass::before { content: '✓ '; color: var(--green); opacity: 1; }
+  .val-checks li.fail::before { content: '✗ '; color: var(--red); opacity: 1; }
+  .val-checks li.pass { color: var(--muted); }
+  .val-checks li.fail { color: var(--red); }
 
   /* ── Node colors ────────────────────────────────────── */
   .node[data-component="detector"]   .node-icon { background: rgba(249,115,22,.15); color: var(--orange); }
@@ -188,41 +222,69 @@
   .node[data-component="tasks"]      .node-icon { background: rgba(34,197,94,.15); color: var(--green); }
   .node[data-component="resources"]  .node-icon { background: rgba(59,130,246,.15); color: var(--blue); }
 
-  /* ── MCP sub-nodes inside agent ──────────────────── */
-  .agent-expanded {
-    display: flex; flex-direction: column; gap: .5rem;
+  /* ── Compact MCP pills inside agent ──────────────── */
+  .mcp-compact {
+    display: flex; gap: .35rem; margin-top: .45rem; flex-wrap: wrap; align-items: center;
   }
-  .mcp-server-group {
-    border: 1px solid rgba(99,102,241,.15); border-radius: 8px;
-    padding: .5rem .6rem; background: rgba(99,102,241,.03);
-    margin-top: .35rem;
+  .mcp-heading {
+    font-size: .5rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--muted); width: 100%; margin-bottom: -.1rem;
   }
-  .mcp-server-header {
-    font-size: .62rem; font-weight: 700; text-transform: uppercase;
-    letter-spacing: .06em; color: var(--accent); margin-bottom: .35rem;
-    display: flex; align-items: center; gap: .3rem;
+  .mcp-pill {
+    display: inline-flex; align-items: center; gap: .25rem;
+    background: rgba(99,102,241,.05); border: 1px solid rgba(99,102,241,.12);
+    border-radius: 20px; padding: .25rem .5rem .25rem .4rem;
+    font-size: .58rem; color: var(--muted); cursor: default;
+    position: relative; transition: border-color .3s, box-shadow .3s;
   }
-  .mcp-server-header .mcp-dot {
-    width: 6px; height: 6px; border-radius: 50%;
-    background: var(--border); transition: background .3s;
+  .mcp-pill.active {
+    border-color: var(--accent); box-shadow: 0 0 8px var(--accent-glow);
   }
-  .mcp-server-header .mcp-dot.active { background: var(--accent); }
-  .tool-list { display: flex; flex-direction: column; gap: .3rem; }
-  .tool-node {
-    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-    padding: .35rem .5rem; font-size: .62rem; color: var(--muted);
-    transition: border-color .3s, box-shadow .3s;
+  .mcp-pill .mcp-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--border); transition: background .3s; flex-shrink: 0;
   }
-  .tool-node.active { border-color: var(--accent); box-shadow: 0 0 10px var(--accent-glow); }
-  .tool-node .tool-name { font-weight: 600; color: var(--text); font-size: .64rem; }
-  .tool-node .tool-args { margin-top: .15rem; font-size: .58rem; line-height: 1.4; word-break: break-word; }
-  .tool-node .tool-args code { background: rgba(255,255,255,.06); padding: .05em .2em; border-radius: 3px; font-family: 'JetBrains Mono',monospace; font-size: .56rem; }
-  .tool-node .tool-result { margin-top: .15rem; font-size: .56rem; color: var(--green); }
+  .mcp-pill .mcp-dot.active { background: var(--green); }
+  .mcp-pill-label { font-weight: 600; white-space: nowrap; }
+  .mcp-call-badge {
+    display: none; min-width: 14px; height: 14px; border-radius: 7px;
+    background: var(--accent); color: #fff; font-size: .48rem; font-weight: 700;
+    text-align: center; line-height: 14px; padding: 0 3px; margin-left: .1rem;
+  }
+  .mcp-call-badge.visible { display: inline-flex; align-items: center; justify-content: center; }
+
+  /* ── MCP tooltip ─────────────────────────────────── */
+  .mcp-tooltip {
+    display: none; position: absolute; bottom: calc(100% + 8px); left: 0;
+    min-width: 240px; max-width: 340px;
+    background: #1e2030; border: 1px solid var(--border); border-radius: 8px;
+    padding: .45rem .55rem; font-size: .58rem; color: var(--text);
+    box-shadow: 0 4px 20px rgba(0,0,0,.5); z-index: 100;
+  }
+  .mcp-tooltip::after {
+    content: ''; position: absolute; top: 100%; left: 0;
+    width: 100%; height: 12px; background: transparent;
+  }
+  .mcp-pill:hover .mcp-tooltip { display: block; }
+  .tt-title { font-weight: 700; font-size: .56rem; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); margin-bottom: .3rem; }
+  .tt-entry { padding: .2rem 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+  .tt-entry:last-child { border-bottom: none; }
+  .tt-name { font-weight: 600; color: var(--text); font-size: .58rem; }
+  .tt-args { color: var(--muted); font-size: .52rem; word-break: break-word; line-height: 1.3; }
+  .tt-args code { background: rgba(255,255,255,.06); padding: .05em .15em; border-radius: 2px; font-family: 'JetBrains Mono',monospace; font-size: .5rem; }
+  .tt-result { color: var(--green); font-size: .52rem; }
+  .tt-empty { color: var(--muted); font-style: italic; font-size: .56rem; }
+
+  /* ── Log component icon ─────────────────────────── */
+  .log-icon {
+    display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    margin-right: .25rem; vertical-align: middle; flex-shrink: 0;
+  }
 
   /* ── Flow arrows ────────────────────────────────────── */
   .flow-arrow {
     display: flex; justify-content: center; color: var(--border);
-    font-size: .9rem; transition: color .3s; padding: .1rem 0;
+    font-size: .8rem; transition: color .3s; padding: 0;
   }
   .flow-arrow.active { color: var(--accent); }
 
@@ -247,9 +309,9 @@
   .badge-edge { background: rgba(234,179,8,.1); color: var(--yellow); border: 1px solid rgba(234,179,8,.2); }
 
   /* ── Prep light ─────────────────────────────────────── */
-  .light-indicator { display: inline-flex; gap: 5px; margin-top: .4rem; }
-  .light-bulb { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--border); transition: all .4s; }
-  .light-bulb.on { box-shadow: 0 0 12px currentColor; }
+  .light-indicator { display: inline-flex; gap: 8px; margin-top: .4rem; }
+  .light-bulb { width: 36px; height: 36px; border-radius: 50%; border: 2px solid var(--border); transition: all .4s; }
+  .light-bulb.on { box-shadow: 0 0 16px currentColor; }
   .light-bulb.green { border-color: var(--green); }
   .light-bulb.green.on { background: var(--green); color: var(--green); }
   .light-bulb.yellow { border-color: var(--yellow); }
@@ -265,7 +327,7 @@
 
   /* ── Detection overlay ──────────────────────────────── */
   .detection-overlay {
-    display: none; width: 100%; border-radius: 6px;
+    display: none; width: 50%; border-radius: 6px;
     margin-top: .4rem; border: 1px solid var(--border);
   }
 
@@ -307,7 +369,7 @@
   /* ── Debug bar ──────────────────────────────────────── */
   .debug-bar {
     background: var(--surface); border-bottom: 1px solid var(--border);
-    padding: .65rem 2rem; display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
+    padding: .45rem 2rem; display: flex; align-items: center; gap: .75rem; flex-wrap: wrap;
   }
   .debug-bar label { font-size: .72rem; color: var(--muted); font-weight: 500; white-space: nowrap; }
   .debug-bar .debug-label { color: var(--orange); font-weight: 600; font-size: .75rem; }
@@ -328,7 +390,7 @@
     .grid { grid-template-columns: 1fr; grid-template-rows: 1fr 300px; }
     .sidebar { border-left: none; border-top: 1px solid var(--border); }
     .diagram { grid-template-columns: 1fr; grid-template-rows: auto; }
-    .zone-camera, .connector-l, .connector-r, .zone-mcp { grid-column: 1; }
+    .left-section, .connector-r, .zone-mcp { grid-column: 1; }
     .zone-edge { grid-column: 1; }
     .output-row { grid-column: 1; }
     .zone-camera { flex-direction: row; }
@@ -369,7 +431,10 @@
   <div class="diagram-pane">
     <div class="diagram">
 
-      <!-- ▸ Camera Zone (col 1) ───────────────────────── -->
+      <!-- ▸ Left Section: Camera + Connector ────────────── -->
+      <div class="left-section">
+
+      <!-- ▸ Camera Zone ───────────────────────────────── -->
       <div class="zone-camera">
         <div class="zone-label">
           VIDEO INPUT
@@ -385,7 +450,7 @@
         </div>
 
         <!-- Stack Light (physical, in OR) -->
-        <div class="node" data-component="prep_light" id="node-prep_light">
+        <div class="node" data-component="prep_light" id="node-prep_light" style="margin-top: auto">
           <div class="node-header">
             <div class="node-icon"></div>
             <div>
@@ -398,15 +463,22 @@
             <div class="light-bulb yellow" id="light-yellow"></div>
             <div class="light-bulb red" id="light-red"></div>
           </div>
-          <div class="node-body" id="body-prep_light">Off</div>
         </div>
       </div>
 
-      <!-- ▸ Left Connector (col 2) ────────────────────── -->
+      <!-- ▸ Left Connector ────────────────────────────── -->
       <div class="connector-l">
-        <div class="conn-arrow" id="conn-left">→</div>
-        <div class="conn-label">Video<br>Stream</div>
+        <div class="conn-group">
+          <div class="conn-arrow" id="conn-left">→</div>
+          <div class="conn-label">Video<br>Stream</div>
+        </div>
+        <div class="conn-group">
+          <div class="conn-arrow" id="conn-actuator">←</div>
+          <div class="conn-label">Actuator</div>
+        </div>
       </div>
+
+      </div><!-- /left-section -->
 
       <!-- ▸ Edge Device (col 3) ───────────────────────── -->
       <div class="zone-edge">
@@ -419,31 +491,35 @@
         </div>
 
         <div class="edge-pipeline">
-          <!-- Object Detector -->
-          <div class="node" data-component="detector" id="node-detector">
-            <div class="node-header">
-              <div class="node-icon"></div>
-              <div>
-                <div class="node-title">Object Detection Model</div>
-                <div class="node-subtitle">Edge Impulse · scalpel, scissors, sponge, tweezers</div>
+          <!-- Visual Events (grouped parent) -->
+          <div class="visual-events">
+            <div class="ve-label">Visual Events</div>
+            <!-- Object Detector -->
+            <div class="node" data-component="detector" id="node-detector">
+              <div class="node-header">
+                <div class="node-icon"></div>
+                <div>
+                  <div class="node-title">Object Detection Model</div>
+                  <div class="node-subtitle">Edge Impulse · scalpel, scissors, sponge, tweezers</div>
+                </div>
               </div>
+              <img id="detectorOverlay" class="detection-overlay" src="" style="display:none" alt="Detection overlay">
+              <div class="node-body" id="body-detector">Waiting for events…</div>
             </div>
-            <img id="detectorOverlay" class="detection-overlay" src="" style="display:none" alt="Detection overlay">
-            <div class="node-body" id="body-detector">Waiting for events…</div>
-          </div>
 
-          <div class="flow-arrow" id="arrow-1">↓</div>
+            <div class="flow-arrow" id="arrow-1">↓</div>
 
-          <!-- Reconciliation -->
-          <div class="node" data-component="reconcile" id="node-reconcile">
-            <div class="node-header">
-              <div class="node-icon"></div>
-              <div>
-                <div class="node-title">Reconciliation</div>
-                <div class="node-subtitle">Maps detections to operational events</div>
+            <!-- Reconciliation -->
+            <div class="node" data-component="reconcile" id="node-reconcile">
+              <div class="node-header">
+                <div class="node-icon"></div>
+                <div>
+                  <div class="node-title">Reconciliation</div>
+                  <div class="node-subtitle">Maps detections to operational events</div>
+                </div>
               </div>
+              <div class="node-body" id="body-reconcile">Idle</div>
             </div>
-            <div class="node-body" id="body-reconcile">Idle</div>
           </div>
 
           <div class="flow-arrow" id="arrow-2">↓</div>
@@ -459,57 +535,33 @@
             </div>
             <div class="node-body" id="body-agent">Idle</div>
 
-            <div class="agent-expanded">
-              <!-- OR Logistics MCP -->
-              <div class="mcp-server-group" id="mcp-or-logistics">
-                <div class="mcp-server-header"><div class="mcp-dot" id="mcp-dot-logistics"></div> OR Logistics MCP</div>
-                <div class="tool-list">
-                  <div class="tool-node" id="tool-get_available_or_resources">
-                    <div class="tool-name">get_available_or_resources</div>
-                    <div class="tool-args" id="tool-args-get_available_or_resources"></div>
-                  </div>
-                  <div class="tool-node" id="tool-set_or_prep_light">
-                    <div class="tool-name">set_or_prep_light</div>
-                    <div class="tool-args" id="tool-args-set_or_prep_light"></div>
-                  </div>
-                  <div class="tool-node" id="tool-request_spd_resupply">
-                    <div class="tool-name">request_spd_resupply</div>
-                    <div class="tool-args" id="tool-args-request_spd_resupply"></div>
-                  </div>
+            <div class="mcp-compact">
+              <div class="mcp-heading">MCP Servers</div>
+              <div class="mcp-pill" id="mcp-or-logistics">
+                <div class="mcp-dot" id="mcp-dot-logistics"></div>
+                <span class="mcp-pill-label">OR Logistics</span>
+                <span class="mcp-call-badge" id="mcp-count-logistics">0</span>
+                <div class="mcp-tooltip" id="mcp-tt-logistics">
+                  <div class="tt-title">OR Logistics MCP</div>
+                  <div class="tt-empty">No calls yet</div>
                 </div>
               </div>
-
-              <!-- Synthetic EMR MCP -->
-              <div class="mcp-server-group" id="mcp-synthetic-emr">
-                <div class="mcp-server-header"><div class="mcp-dot" id="mcp-dot-emr"></div> Synthetic EMR MCP</div>
-                <div class="tool-list">
-                  <div class="tool-node" id="tool-get_surgical_pathway">
-                    <div class="tool-name">get_surgical_pathway</div>
-                    <div class="tool-args" id="tool-args-get_surgical_pathway"></div>
-                  </div>
-                  <div class="tool-node" id="tool-get_case_setup_requirements">
-                    <div class="tool-name">get_case_setup_requirements</div>
-                    <div class="tool-args" id="tool-args-get_case_setup_requirements"></div>
-                  </div>
-                  <div class="tool-node" id="tool-create_synthetic_or_task">
-                    <div class="tool-name">create_synthetic_or_task</div>
-                    <div class="tool-args" id="tool-args-create_synthetic_or_task"></div>
-                  </div>
+              <div class="mcp-pill" id="mcp-synthetic-emr">
+                <div class="mcp-dot" id="mcp-dot-emr"></div>
+                <span class="mcp-pill-label">Electronic Medical Record</span>
+                <span class="mcp-call-badge" id="mcp-count-emr">0</span>
+                <div class="mcp-tooltip" id="mcp-tt-emr">
+                  <div class="tt-title">Electronic Medical Record MCP</div>
+                  <div class="tt-empty">No calls yet</div>
                 </div>
               </div>
-
-              <!-- VLM tools -->
-              <div class="mcp-server-group" id="mcp-vlm-tools">
-                <div class="mcp-server-header"><div class="mcp-dot" id="mcp-dot-vlm"></div> Vision Tools</div>
-                <div class="tool-list">
-                  <div class="tool-node" id="tool-inspect_scene_local">
-                    <div class="tool-name">inspect_scene_local</div>
-                    <div class="tool-args" id="tool-args-inspect_scene_local"></div>
-                  </div>
-                  <div class="tool-node" id="tool-inspect_scene_remote">
-                    <div class="tool-name">inspect_scene_remote</div>
-                    <div class="tool-args" id="tool-args-inspect_scene_remote"></div>
-                  </div>
+              <div class="mcp-pill" id="mcp-vlm-tools">
+                <div class="mcp-dot" id="mcp-dot-vlm"></div>
+                <span class="mcp-pill-label">Vision</span>
+                <span class="mcp-call-badge" id="mcp-count-vlm">0</span>
+                <div class="mcp-tooltip" id="mcp-tt-vlm">
+                  <div class="tt-title">Vision Tools</div>
+                  <div class="tt-empty">No calls yet</div>
                 </div>
               </div>
             </div>
@@ -517,30 +569,36 @@
 
           <div class="flow-arrow" id="arrow-3">↓</div>
 
-          <!-- Local VLM — runs on edge device -->
-          <div class="node" data-component="vlm_local" id="node-vlm_local">
-            <div class="node-header">
-              <div class="node-icon"></div>
-              <div>
-                <div class="node-title">Local VLM <span class="badge-external badge-edge">Edge</span></div>
-                <div class="node-subtitle">Ministral 3B · vLLM · localhost:8081 · No cloud dependency</div>
+          <!-- Bottom row: Local VLM + Validation side by side -->
+          <div class="edge-bottom-row">
+            <div class="node" data-component="vlm_local" id="node-vlm_local">
+              <div class="node-header">
+                <div class="node-icon"></div>
+                <div>
+                  <div class="node-title">Local VLM <span class="badge-external badge-edge">Edge</span></div>
+                  <div class="node-subtitle">Ministral 3B · vLLM · Visual reasoning</div>
+                </div>
               </div>
+              <div class="node-body" id="body-vlm_local">Idle</div>
             </div>
-            <div class="node-body" id="body-vlm_local">Idle</div>
-          </div>
 
-          <div class="flow-arrow" id="arrow-4">↓</div>
-
-          <!-- Bottom: Validation -->
-          <div class="node" data-component="validation" id="node-validation">
-            <div class="node-header">
-              <div class="node-icon"></div>
-              <div>
-                <div class="node-title">Validation</div>
-                <div class="node-subtitle">Safety gate</div>
+            <div class="node" data-component="validation" id="node-validation">
+              <div class="node-header">
+                <div class="node-icon"></div>
+                <div>
+                  <div class="node-title">Validation</div>
+                  <div class="node-subtitle">Safety gate</div>
+                </div>
               </div>
+              <div class="node-body" id="body-validation">Idle</div>
+              <ul class="val-checks" id="val-checks">
+                <li data-check="allowlist">Allowlist</li>
+                <li data-check="task_args">Task args</li>
+                <li data-check="spd_args">SPD args</li>
+                <li data-check="light_args">Light args</li>
+                <li data-check="confidence">Confidence</li>
+              </ul>
             </div>
-            <div class="node-body" id="body-validation">Idle</div>
           </div>
         </div>
       </div>
@@ -561,7 +619,7 @@
             <div class="node-header">
               <div class="node-icon"></div>
               <div>
-                <div class="node-title">EMR API <span class="badge-external badge-cloud">Network</span></div>
+                <div class="node-title">Electronic Medical Record <span class="badge-external badge-cloud">Network</span></div>
                 <div class="node-subtitle">localhost:9000 · Patient data</div>
               </div>
             </div>
@@ -579,8 +637,6 @@
             <img id="vlm-remote-thumb" class="vlm-thumb" src="" alt="VLM input">
             <div class="node-body" id="body-vlm_remote">Idle</div>
           </div>
-
-          <div class="mcp-divider">Physical Outputs</div>
 
           <div class="node" data-component="tasks" id="node-tasks">
             <div class="node-header">
@@ -614,6 +670,7 @@
     <h2>Quick Scenarios</h2>
     <div class="scenario-bar">
       <button class="scenario-btn" onclick="runScenario('missing_scissors')">Missing Scissors</button>
+      <button class="scenario-btn" onclick="runScenario('missing_suction_tip')">Missing Suction Tip</button>
       <button class="scenario-btn" onclick="runScenario('all_present')">All Present</button>
       <button class="scenario-btn" onclick="runScenario('procedure_changed')">Procedure Changed</button>
       <button class="scenario-btn" onclick="runScenario('specimen_handoff')">Specimen Handoff</button>
@@ -692,9 +749,68 @@ async function loadDebugOptions() {
 loadDebugOptions();
 
 // ── Event Handler ───────────────────────────────────
+// ── Pipeline activation state ────────────────────────
+let _pipelineTimer = null;
+
+function deactivateAll() {
+  document.querySelectorAll('.node.active, .node.thinking').forEach(n => {
+    n.classList.remove('active', 'thinking');
+  });
+  document.querySelectorAll('.flow-arrow.active').forEach(a => a.classList.remove('active'));
+  document.querySelectorAll('.conn-arrow.active').forEach(a => a.classList.remove('active'));
+  document.querySelectorAll('.mcp-pill.active').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.mcp-dot.active').forEach(d => d.classList.remove('active'));
+  if (detectorImageWrap) detectorImageWrap.classList.remove('active');
+}
+
+function resetPipeline() {
+  clearTimeout(_pipelineTimer);
+  deactivateAll();
+
+  // Reset node bodies to initial text
+  const bodyDefaults = {
+    detector: 'Waiting for events…', reconcile: 'Idle', agent: 'Idle',
+    vlm_local: 'Idle', validation: 'Idle', emr_api: 'Idle',
+    vlm_remote: 'Idle', tasks: 'No tasks', spd: 'Idle',
+  };
+  Object.entries(bodyDefaults).forEach(([id, text]) => {
+    const el = document.getElementById('body-' + id);
+    if (el) { el.innerHTML = text; el.classList.remove('expanded'); }
+    // Remove Show more/less toggles
+    const toggle = el && el.parentElement.querySelector('.body-toggle');
+    if (toggle) toggle.remove();
+  });
+
+  // Reset validation checklist
+  document.querySelectorAll('#val-checks li').forEach(li => li.classList.remove('pass', 'fail'));
+
+  // Reset stack light
+  ['green','yellow','red'].forEach(c => {
+    const el = document.getElementById('light-' + c);
+    if (el) el.classList.remove('on');
+  });
+
+  // Reset detector image + overlay
+  if (detectorImage) { detectorImage.style.display = 'none'; }
+  if (detectorPlaceholder) { detectorPlaceholder.style.display = ''; }
+  const overlay = document.getElementById('detectorOverlay');
+  if (overlay) { overlay.style.display = 'none'; }
+}
+
 function handleEvent(ev) {
   const comp = ev.component;
   if (!comp) return;
+
+  // Agent thinking/done lifecycle
+  if (comp === 'agent') {
+    const agentNode = document.getElementById('node-agent');
+    if (ev.status === 'thinking' && agentNode) {
+      agentNode.classList.add('active', 'thinking');
+    } else if (ev.status === 'done' && agentNode) {
+      agentNode.classList.remove('thinking');
+    }
+  }
+
   activateNode(comp);
   activateArrows(comp);
   activateConnectors(comp);
@@ -704,6 +820,12 @@ function handleEvent(ev) {
   if (comp === 'detector' && ev.detection_image_url) showDetectionOverlay(ev.detection_image_url);
   if (comp === 'tool_call') activateTool(ev);
   addLog(ev);
+
+  // Validation is the last pipeline event — deactivate after a delay
+  if (comp === 'validation') {
+    clearTimeout(_pipelineTimer);
+    _pipelineTimer = setTimeout(deactivateAll, 4000);
+  }
 }
 
 function showDetectorImage(url) {
@@ -711,8 +833,6 @@ function showDetectorImage(url) {
   detectorImage.style.display = 'block';
   detectorPlaceholder.style.display = 'none';
   detectorImageWrap.classList.add('active');
-  clearTimeout(detectorImageWrap._timer);
-  detectorImageWrap._timer = setTimeout(() => detectorImageWrap.classList.remove('active'), 3000);
 }
 
 function showDetectionOverlay(url) {
@@ -726,8 +846,6 @@ function activateNode(comp) {
   const node = document.getElementById('node-' + comp);
   if (!node) return;
   node.classList.add('active');
-  clearTimeout(node._timer);
-  node._timer = setTimeout(() => node.classList.remove('active'), 3000);
 }
 
 function activateArrows(comp) {
@@ -735,10 +853,10 @@ function activateArrows(comp) {
     detector: ['arrow-1'],
     reconcile: ['arrow-1','arrow-2'],
     agent: ['arrow-2','arrow-3'],
-    vlm_local: ['arrow-3','arrow-4'],
-    validation: ['arrow-4'],
+    vlm_local: ['arrow-3'],
+    validation: ['arrow-3'],
     tasks: [],
-    prep_light: [],
+    prep_light: ['conn-actuator'],
     spd: [],
     vlm_remote: [],
   };
@@ -746,27 +864,21 @@ function activateArrows(comp) {
     const el = document.getElementById(id);
     if (!el) return;
     el.classList.add('active');
-    clearTimeout(el._timer);
-    el._timer = setTimeout(() => el.classList.remove('active'), 2500);
   });
 }
 
 function activateConnectors(comp) {
   // Left connector: camera/OR → edge device
-  const leftComps = ['detector','prep_light'];
+  const leftComps = ['detector'];
   // Right connector: edge ↔ external APIs
   const rightComps = ['emr_api','agent','tasks','spd','vlm_remote'];
   const cl = document.getElementById('conn-left');
   const cr = document.getElementById('conn-right');
   if (leftComps.includes(comp) && cl) {
     cl.classList.add('active');
-    clearTimeout(cl._timer);
-    cl._timer = setTimeout(() => cl.classList.remove('active'), 2500);
   }
   if (rightComps.includes(comp) && cr) {
     cr.classList.add('active');
-    clearTimeout(cr._timer);
-    cr._timer = setTimeout(() => cr.classList.remove('active'), 2500);
   }
 }
 
@@ -790,7 +902,7 @@ function maybeAddToggle(body) {
   });
 }
 
-// ── Tool-call activation inside agent MCP sub-nodes ──
+// ── Tool-call activation inside agent MCP pills ─────
 const toolToMcp = {
   get_available_or_resources: 'logistics',
   set_or_prep_light: 'logistics',
@@ -802,47 +914,87 @@ const toolToMcp = {
   inspect_scene_remote: 'vlm',
 };
 
+const mcpPillIds = { logistics: 'mcp-or-logistics', emr: 'mcp-synthetic-emr', vlm: 'mcp-vlm-tools' };
+const mcpCallCounts = { logistics: 0, emr: 0, vlm: 0 };
+
+const componentColors = {
+  detector: '#f97316', reconcile: '#06b6d4', agent: '#6366f1',
+  emr_api: '#22c55e', vlm_local: '#eab308', vlm_remote: '#a855f7',
+  validation: '#a855f7', tool_call: '#06b6d4', tasks: '#22c55e',
+  prep_light: '#ef4444', spd: '#3b82f6', resources: '#3b82f6',
+};
+
+function resetMcpState() {
+  ['logistics','emr','vlm'].forEach(k => {
+    mcpCallCounts[k] = 0;
+    const badge = document.getElementById('mcp-count-' + k);
+    if (badge) { badge.textContent = '0'; badge.classList.remove('visible'); }
+    const tt = document.getElementById('mcp-tt-' + k);
+    if (tt) {
+      const title = tt.querySelector('.tt-title');
+      const titleText = title ? title.outerHTML : '';
+      tt.innerHTML = titleText + '<div class="tt-empty">No calls yet</div>';
+    }
+  });
+}
+
 function activateTool(ev) {
   const name = ev.tool_name;
   if (!name) return;
-  const toolEl = document.getElementById('tool-' + name);
-  if (!toolEl) return;
 
-  // Light up the tool node
-  toolEl.classList.add('active');
-  clearTimeout(toolEl._timer);
-  toolEl._timer = setTimeout(() => toolEl.classList.remove('active'), 4000);
-
-  // Show args
-  const argsEl = document.getElementById('tool-args-' + name);
-  if (argsEl) {
-    let html = '';
-    if (ev.tool_args) {
-      const args = typeof ev.tool_args === 'string' ? ev.tool_args : JSON.stringify(ev.tool_args);
-      html += '→ <code>' + esc(truncate(args, 120)) + '</code>';
-    }
-    if (ev.tool_result) {
-      const res = typeof ev.tool_result === 'string' ? ev.tool_result : JSON.stringify(ev.tool_result);
-      html += '<div class="tool-result">← ' + esc(truncate(res, 100)) + '</div>';
-    }
-    argsEl.innerHTML = html;
-  }
-
-  // Light up the MCP server dot
   const mcpKey = toolToMcp[name];
   if (mcpKey) {
+    // Activate pill
+    const pill = document.getElementById(mcpPillIds[mcpKey]);
+    if (pill) {
+      pill.classList.add('active');
+    }
+
+    // Activate dot
     const dot = document.getElementById('mcp-dot-' + mcpKey);
     if (dot) {
       dot.classList.add('active');
-      clearTimeout(dot._timer);
-      dot._timer = setTimeout(() => dot.classList.remove('active'), 4000);
+    }
+
+    // Bump counter badge
+    mcpCallCounts[mcpKey]++;
+    const badge = document.getElementById('mcp-count-' + mcpKey);
+    if (badge) {
+      badge.textContent = mcpCallCounts[mcpKey];
+      badge.classList.add('visible');
+    }
+
+    // Update tooltip
+    const tt = document.getElementById('mcp-tt-' + mcpKey);
+    if (tt) {
+      const empty = tt.querySelector('.tt-empty');
+      if (empty) empty.remove();
+
+      const entry = document.createElement('div');
+      entry.className = 'tt-entry';
+      let html = '<span class="tt-name">' + esc(name) + '</span>';
+      if (ev.tool_args) {
+        const args = typeof ev.tool_args === 'string' ? ev.tool_args : JSON.stringify(ev.tool_args);
+        html += '<div class="tt-args">→ <code>' + esc(truncate(args, 120)) + '</code></div>';
+      }
+      if (ev.tool_result) {
+        const res = typeof ev.tool_result === 'string' ? ev.tool_result : JSON.stringify(ev.tool_result);
+        html += '<div class="tt-result">← ' + esc(truncate(res, 100)) + '</div>';
+      }
+      entry.innerHTML = html;
+      tt.appendChild(entry);
+      // Keep max 8 entries (after the title)
+      while (tt.querySelectorAll('.tt-entry').length > 8) {
+        const first = tt.querySelector('.tt-entry');
+        if (first) first.remove();
+      }
     }
   }
 
-  // Also activate the agent node itself
+  // Also activate the agent node
   activateNode('agent');
 
-  // Activate right connector for tools that call external APIs
+  // Activate right connector for external API calls
   const externalTools = ['inspect_scene_remote', 'get_surgical_pathway', 'get_case_setup_requirements', 'create_synthetic_or_task'];
   if (externalTools.includes(name)) {
     const cr = document.getElementById('conn-right');
@@ -865,7 +1017,10 @@ function updateBody(comp, ev) {
   if (comp === 'detector') {
     let html = '';
     if (ev.event_type) html += 'Type: <code>' + esc(ev.event_type) + '</code><br>';
-    if (ev.confidence != null) html += 'Confidence: <code>' + ev.confidence + '</code><br>';
+    const meta = [];
+    if (ev.confidence != null) meta.push('Confidence: <code>' + ev.confidence + '</code>');
+    if (ev.inference_ms != null) meta.push('Inference: <code>' + ev.inference_ms.toFixed(0) + ' ms</code>');
+    if (meta.length) html += meta.join(' · ') + '<br>';
     if (ev.visible_items) {
       if (typeof ev.visible_items === 'object' && !Array.isArray(ev.visible_items)) {
         const items = Object.entries(ev.visible_items).map(([k,v]) => k + ': ' + v).join(', ');
@@ -874,21 +1029,28 @@ function updateBody(comp, ev) {
         html += 'Visible: <code>' + esc(ev.visible_items.join(', ')) + '</code><br>';
       }
     }
-    if (ev.missing_items && ev.missing_items.length) html += 'Missing: <code>' + esc(ev.missing_items.join(', ')) + '</code><br>';
-    if (ev.inference_ms != null) html += 'Inference: <code>' + ev.inference_ms.toFixed(0) + ' ms</code>';
+    if (ev.missing_items && ev.missing_items.length) html += 'Missing: <code>' + esc(ev.missing_items.join(', ')) + '</code>';
     body.innerHTML = html || esc(detail) || 'Active';
   } else if (comp === 'reconcile') {
-    let html = '';
-    if (ev.all_present != null) html += 'All present: <code>' + ev.all_present + '</code><br>';
-    if (ev.actionable_missing) html += 'Gaps: <code>' + esc(ev.actionable_missing.join(', ') || 'none') + '</code><br>';
-    if (ev.unaccounted) html += 'Unaccounted: <code>' + esc(ev.unaccounted.join(', ') || 'none') + '</code>';
-    body.innerHTML = html || esc(detail) || 'Done';
+    const parts = [];
+    if (ev.all_present != null) parts.push('All present: <code>' + ev.all_present + '</code>');
+    if (ev.actionable_missing) parts.push('Gaps: <code>' + esc(ev.actionable_missing.join(', ') || 'none') + '</code>');
+    if (ev.unaccounted) parts.push('Unaccounted: <code>' + esc(ev.unaccounted.join(', ') || 'none') + '</code>');
+    body.innerHTML = parts.join(' | ') || esc(detail) || 'Done';
   } else if (comp === 'agent') {
     let html = '';
     if (ev.status) html += 'Status: <code>' + esc(ev.status) + '</code><br>';
     if (ev.tool_calls != null) html += 'Tool calls: <code>' + ev.tool_calls + '</code><br>';
     if (ev.summary) html += esc(ev.summary);
     body.innerHTML = html || esc(detail) || 'Active';
+    // Show full summary as native tooltip when clipped
+    requestAnimationFrame(() => {
+      if (body.scrollHeight > body.clientHeight + 2 && ev.summary) {
+        body.title = ev.summary;
+      } else {
+        body.removeAttribute('title');
+      }
+    });
     maybeAddToggle(body);
   } else if (comp === 'tasks') {
     let html = '';
@@ -923,16 +1085,36 @@ function updateBody(comp, ev) {
     body.innerHTML = html || esc(detail) || 'Active';
     maybeAddToggle(body);
   } else if (comp === 'vlm_remote') {
-    body.innerHTML = ev.answer ? '<code>' + esc(ev.answer) + '</code>' : esc(detail) || 'Active';
+    let html = '';
+    if (ev.question) html += '<span style="color:var(--muted)">Q:</span> ' + esc(ev.question) + '<br>';
+    if (ev.answer) html += '<span style="color:var(--purple)">A:</span> ' + esc(ev.answer);
+    body.innerHTML = html || esc(detail) || 'Active';
     if (ev.image_url) { const vt = document.getElementById('vlm-remote-thumb'); if (vt) { vt.src = ev.image_url; vt.style.display = 'block'; } }
     maybeAddToggle(body);
   } else if (comp === 'tool_call') {
     // Handled by activateTool — no body node for this
     return;
   } else if (comp === 'validation') {
-    if (ev.errors && ev.errors.length) {
-      let html = '<span style="color:var(--red)">\u26A0 ' + ev.errors.length + ' error(s)</span><br>';
-      ev.errors.forEach(function(e) { html += '<span style="font-size:.62rem">• ' + esc(e) + '</span><br>'; });
+    // Update checklist
+    const checks = document.querySelectorAll('#val-checks li');
+    const errs = ev.errors || [];
+    const errStr = errs.join(' ');
+    const checkMap = {
+      allowlist:   /not allowed/,
+      task_args:   /invalid task_type|invalid priority/,
+      spd_args:    /invalid urgency|missing item_name/,
+      light_args:  /invalid light color|invalid duration/,
+      confidence:  /cannot actuate below/,
+    };
+    checks.forEach(li => {
+      const key = li.dataset.check;
+      const failed = checkMap[key] && checkMap[key].test(errStr);
+      li.classList.remove('pass', 'fail');
+      li.classList.add(failed ? 'fail' : 'pass');
+    });
+    if (errs.length) {
+      let html = '<span style="color:var(--red)">\u26A0 ' + errs.length + ' error(s)</span><br>';
+      errs.forEach(function(e) { html += '<span style="font-size:.62rem">• ' + esc(e) + '</span><br>'; });
       body.innerHTML = html;
     } else {
       body.innerHTML = '<span style="color:var(--green)">\u2713 Passed</span>';
@@ -960,10 +1142,19 @@ function addLog(ev) {
   entry.dataset.component = ev.component;
   const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
   const detail = ev.detail || ev.summary || JSON.stringify(ev).slice(0, 200);
+  const color = componentColors[ev.component] || '#71717a';
+  const compName = formatComponent(ev.component);
+
+  // Tool call entries show tool name in detail
+  let detailHtml = esc(truncate(detail, 180));
+  if (ev.component === 'tool_call' && ev.tool_name) {
+    detailHtml = '<code>' + esc(ev.tool_name) + '</code> ' + detailHtml;
+  }
+
   entry.innerHTML =
     '<div class="log-time">' + time + '</div>' +
-    '<div class="log-comp">' + formatComponent(ev.component) + '</div>' +
-    '<div class="log-detail">' + esc(truncate(detail, 180)) + '</div>';
+    '<div class="log-comp"><span class="log-icon" style="background:' + color + '"></span><span style="color:' + color + '">' + compName + '</span></div>' +
+    '<div class="log-detail">' + detailHtml + '</div>';
   log.prepend(entry);
   while (log.children.length > MAX_LOG) log.lastChild.remove();
 }
@@ -982,6 +1173,8 @@ function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
 
 // ── Quick Scenario Runner ───────────────────────────
 async function runScenario(name) {
+  resetMcpState();
+  resetPipeline();
   const btns = document.querySelectorAll('.scenario-btn');
   btns.forEach(b => b.classList.add('running'));
   try {
@@ -992,8 +1185,26 @@ async function runScenario(name) {
   finally { setTimeout(() => btns.forEach(b => b.classList.remove('running')), 1000); }
 }
 
+// ── Align right connector with LLM Agent ─────────
+function alignConnectorR() {
+  const agent = document.getElementById('node-agent');
+  const connR = document.querySelector('.connector-r');
+  const edge = document.querySelector('.zone-edge');
+  if (!agent || !connR || !edge) return;
+  const edgeTop = edge.getBoundingClientRect().top;
+  const aRect = agent.getBoundingClientRect();
+  connR.style.paddingTop = Math.max(0, aRect.top - edgeTop) + 'px';
+}
+requestAnimationFrame(() => setTimeout(alignConnectorR, 100));
+window.addEventListener('resize', alignConnectorR);
+new MutationObserver(alignConnectorR).observe(
+  document.querySelector('.edge-pipeline'), { childList: true, subtree: true, characterData: true }
+);
+
 // ── Debug Runner ────────────────────────────────────
 async function runDebug() {
+  resetMcpState();
+  resetPipeline();
   const scenario = document.getElementById('selScenario').value;
   const imageUrl = document.getElementById('selImage').value;
   const btn = document.getElementById('btnRun');

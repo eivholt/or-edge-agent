@@ -286,7 +286,7 @@ def _run_pipeline(scenario_path: str):
     _emit("agent",
           status="done",
           tool_calls=len(tool_calls),
-          summary=decision.get("decision_summary", "")[:200],
+          summary=decision.get("decision_summary", ""),
           detail=f"{len(tool_calls)} tool call(s)")
 
     # 6. Emit individual tool call results
@@ -324,8 +324,10 @@ def _run_pipeline(scenario_path: str):
                   answer=tc.get("result", {}).get("answer", "") if isinstance(tc.get("result"), dict) else str(tc.get("result", "")),
                   detail=f"Local VLM: {args.get('question', '')[:80]}")
         elif name == "inspect_scene_remote":
+            result = tc.get("result", {})
             _emit("vlm_remote",
-                  answer=args.get("question", ""),
+                  question=args.get("question", ""),
+                  answer=result.get("answer", "") if isinstance(result, dict) else str(result),
                   image_url=image_url,
                   detail=f"Remote VLM (GPT-4o): {args.get('question', '')[:80]}")
 

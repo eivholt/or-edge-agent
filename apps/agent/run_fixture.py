@@ -54,7 +54,9 @@ Rules:
    Only use inspect_scene_remote as cloud fallback if local VLM fails.
 
 Never actuate (set_or_prep_light) when confidence_level is "low" unless VLM has confirmed.
-Use request_spd_resupply only when explicitly told to order sterile resupply."""
+Use request_spd_resupply only when explicitly told to order sterile resupply.
+
+Never ask the user for input or confirmation. Always decide and act autonomously."""
 
 
 # ── Dependencies (passed via RunContext) ─────────────────────────────
@@ -192,6 +194,14 @@ def inspect_scene_local(
     if not resolved.is_absolute():
         resolved = DATA_DIR / image_path
 
+    # Try alternate extensions if exact path not found
+    if not resolved.is_file():
+        for alt in (".png", ".jpg", ".jpeg", ".webp"):
+            candidate = resolved.with_suffix(alt)
+            if candidate.is_file():
+                resolved = candidate
+                break
+
     if not resolved.is_file():
         return {"error": f"image not found: {resolved}"}
 
@@ -254,6 +264,14 @@ def inspect_scene_remote(
     resolved = Path(image_path)
     if not resolved.is_absolute():
         resolved = DATA_DIR / image_path
+
+    # Try alternate extensions if exact path not found
+    if not resolved.is_file():
+        for alt in (".png", ".jpg", ".jpeg", ".webp"):
+            candidate = resolved.with_suffix(alt)
+            if candidate.is_file():
+                resolved = candidate
+                break
 
     if not resolved.is_file():
         return {"error": f"image not found: {resolved}"}
@@ -371,20 +389,30 @@ def ask_agent(event: dict, case: dict, resources: dict) -> dict:
     )
     result = or_agent.run_sync(prompt, deps=deps)
 
-    # Extract tool calls from the run result
+    # Extract tool calls and their results from the run result
     tool_calls = []
+    tool_results = {}  # tool_call_id → result content
     for msg in result.all_messages():
         if hasattr(msg, "parts"):
             for part in msg.parts:
-                if hasattr(part, "tool_name") and hasattr(part, "args"):
-                    tool_calls.append({
+                if getattr(part, "part_kind", "") == "tool-return":
+                    tool_results[part.tool_call_id] = part.content
+    for msg in result.all_messages():
+        if hasattr(msg, "parts"):
+            for part in msg.parts:
+                if getattr(part, "part_kind", "") == "tool-call":
+                    call_id = part.tool_call_id
+                    tc = {
                         "name": part.tool_name,
                         "arguments": (
                             part.args if isinstance(part.args, dict)
                             else json.loads(part.args) if isinstance(part.args, str)
                             else {}
                         ),
-                    })
+                    }
+                    if call_id and call_id in tool_results:
+                        tc["result"] = tool_results[call_id]
+                    tool_calls.append(tc)
 
     has_human_review = any(
         tc["arguments"].get("task_type") == "human_review"

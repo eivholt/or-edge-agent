@@ -7,7 +7,7 @@
   "missing_or_uncertain": [],
   "zone": "full_room",
   "confidence": 0.60,
-  "image_path": "frames/frame_ppe_check.png",
+  "image_path": "frames/frame_ppe_compliance_check.png",
   "timestamp": "2026-05-16T08:30:00+02:00",
   "vlm_hint": "One person near the instrument table does not appear to be wearing a surgical mask."
 }

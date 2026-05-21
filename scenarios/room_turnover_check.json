@@ -7,7 +7,7 @@
   "missing_or_uncertain": [],
   "zone": "full_room",
   "confidence": 0.65,
-  "image_path": "frames/frame_room_turnover.png",
+  "image_path": "frames/frame_room_turnover_check.png",
   "timestamp": "2026-05-16T14:00:00+02:00",
   "vlm_hint": "Previous patient equipment (gurney, IV pole) may still be present in the OR."
 }
