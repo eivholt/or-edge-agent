@@ -169,14 +169,6 @@ def _emit(component: str, **kwargs):
     _broadcast(event)
 
 
-def _reconcile_detail(recon: dict) -> str:
-    if recon["all_present"]:
-        return "All present"
-    gaps = len(recon["actionable_missing"])
-    unacc = len(recon["unaccounted"])
-    return f"{gaps} gaps, {unacc} unaccounted"
-
-
 @app.post("/run/{scenario}")
 async def run_scenario(scenario: str, offline: str = ""):
     """Run a scenario through the agent pipeline and stream events to SSE."""
@@ -254,29 +246,7 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
           detail=f"Detected {total_visible} items, "
                  f"{len(event.get('missing_or_uncertain', []))} uncertain")
 
-    # 2. Fetch case from EMR (via synthetic-emr MCP → EMR API)
-    case_id = event["case_id"]
-    _emit("pipeline",
-          step="get_surgical_pathway",
-          detail=f"get_surgical_pathway(case_id={case_id})")
-    r = httpx.get(f"http://localhost:9000/cases/{case_id}", timeout=10)
-    r.raise_for_status()
-    case = r.json()
-    _emit("emr_api",
-          case_id=case_id,
-          procedure=case.get("procedure", ""),
-          detail=f"Fetched case {case_id}: {case.get('procedure', '?')}")
-
-    # 3. Reconcile
-    from apps.agent.run_fixture import reconcile_setup
-    recon = reconcile_setup(event, case)
-    _emit("reconcile",
-          all_present=recon["all_present"],
-          actionable_missing=recon.get("actionable_missing_detail", recon["actionable_missing"]),
-          unaccounted=recon.get("unaccounted_detail", recon["unaccounted"]),
-          detail=_reconcile_detail(recon))
-
-    # 4. Resources (queried as part of agent context)
+    # 2. Resources (static context for the agent)
     resources = {
         "room_id": event.get("room_id", "OR-?"),
         "cloud_connected": cloud_connected,
@@ -284,25 +254,23 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
         "human_runner": {"available": True, "eta_seconds": 420},
         "porter": {"available": True, "eta_seconds": 300},
     }
-    conn_label = "online" if cloud_connected else "OFFLINE"
-    _emit("pipeline",
-          step="get_available_or_resources",
-          detail=f"get_available_or_resources → cloud={conn_label}")
 
-    # 5. Agent decision (import inline to avoid circular / heavy load)
+    # 3. Agent decision — agent calls EMR + reconcile as tools
     _emit("agent", status="thinking", detail="LLM processing…")
 
     from apps.agent.run_fixture import ask_agent
-    decision = ask_agent(event, case, resources, emit=_emit)
+    decision = ask_agent(event, resources, emit=_emit)
 
     tool_calls = decision.get("tool_calls", [])
+    llm_iters = decision.get("llm_iterations", 0)
     _emit("agent",
           status="done",
           tool_calls=len(tool_calls),
+          llm_iterations=llm_iters,
           summary=decision.get("decision_summary", ""),
           detail=f"{len(tool_calls)} tool call(s)")
 
-    # 6. Validation
+    # 4. Validation
     errors = validate_decision(decision, event)
     _emit("validation",
           errors=errors,

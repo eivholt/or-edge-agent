@@ -1,6 +1,8 @@
 import logfire
 
 ALLOWED_TOOLS = {
+    "get_surgical_pathway",
+    "reconcile_instruments",
     "create_synthetic_or_task",
     "request_spd_resupply",
     "request_spd_robot_delivery",

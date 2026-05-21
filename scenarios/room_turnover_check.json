@@ -7,5 +7,6 @@
   "confidence": 0.65,
   "image_path": "frames/frame_room_turnover_check.png",
   "timestamp": "2026-05-16T14:00:00+02:00",
-  "vlm_hint": "Previous patient equipment (gurney, IV pole) may still be present in the OR."
+  "vlm_hint": "Previous patient equipment (gurney, IV pole) may still be present in the OR.",
+  "vlm_question": "Is this operating room clear and ready for the next patient? List any leftover equipment, instruments, or materials from the previous case that are still visible (e.g. gurney, IV pole, drapes, used supplies). Answer CLEAR if the room is empty, otherwise list what remains."
 }

@@ -9,7 +9,7 @@ Mark with ``pytest -m llm`` or run the whole suite.
 
 import pytest
 
-from apps.agent.run_fixture import ask_agent, get_case, get_resources
+from apps.agent.run_fixture import ask_agent, get_resources
 from apps.agent.validation import validate_decision
 
 # Shared detector event — identical for both cases
@@ -36,9 +36,9 @@ RESOURCES = get_resources("OR-2")
 @pytest.mark.llm
 def test_no_escalation_when_pathway_does_not_need_item():
     """Case A: tweezers flagged uncertain but not required → no missing_supply task."""
-    case_a = get_case("CASE-A")
-    decision = ask_agent(EVENT, case_a, RESOURCES)
-    errors = validate_decision(decision, EVENT)
+    event_a = dict(EVENT, case_id="CASE-A")
+    decision = ask_agent(event_a, RESOURCES)
+    errors = validate_decision(decision, event_a)
     assert not errors, f"Validation errors: {errors}"
 
     task_types = [
@@ -58,7 +58,7 @@ def test_missing_supply_when_pathway_requires_item():
     But CASE-B requires tweezers:2, event shows tweezers:3 → count is sufficient.
     Let's use a different event with a real deficit."""
     # Override event to have tweezers deficit
-    event_with_deficit = dict(EVENT)
+    event_with_deficit = dict(EVENT, case_id="CASE-B")
     event_with_deficit["visible_items"] = {
         "scalpel": 2,
         "scissors": 1,
@@ -67,8 +67,7 @@ def test_missing_supply_when_pathway_requires_item():
     }
     event_with_deficit["missing_or_uncertain"] = ["scissors"]
 
-    case_b = get_case("CASE-B")
-    decision = ask_agent(event_with_deficit, case_b, RESOURCES)
+    decision = ask_agent(event_with_deficit, RESOURCES)
     errors = validate_decision(decision, event_with_deficit)
     assert not errors, f"Validation errors: {errors}"
 

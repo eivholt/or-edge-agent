@@ -47,9 +47,8 @@ RESULTS: list[BenchResult] = []
 
 def _run(name: str, level: int, event: dict, case_id: str, checks: callable):
     """Run agent, validate, apply checks, record result."""
-    case = get_case(case_id)
     t0 = time.perf_counter()
-    decision = ask_agent(event, case, RESOURCES)
+    decision = ask_agent(event, RESOURCES)
     latency = (time.perf_counter() - t0) * 1000
 
     val_errors = validate_decision(decision, event)
@@ -581,9 +580,8 @@ class TestLevel5Adversarial:
 
         _run("empty_table→all_tasks", 5, event, "CASE-BENCH-2", checks)
 
-    def test_L5_05_no_spd_unless_explicit(self):
-        """Agent should NOT call request_spd_resupply spontaneously —
-        instructions say 'only when explicitly told to order sterile resupply'."""
+    def test_L5_05_spd_accompanies_missing_supply(self):
+        """Agent should call request_spd_resupply alongside missing_supply tasks."""
         event = {
             "event_id": "bench-L5-05", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
@@ -596,15 +594,18 @@ class TestLevel5Adversarial:
 
         def checks(d):
             errs = []
+            supply_tasks = [tc for tc in d["tool_calls"]
+                            if tc["name"] == "create_synthetic_or_task"
+                            and tc["arguments"].get("task_type") == "missing_supply"]
             spd = [tc for tc in d["tool_calls"]
                    if tc["name"] in ("request_spd_resupply", "request_spd_robot_delivery")]
-            if spd:
+            if supply_tasks and not spd:
                 errs.append(
-                    f"Agent should not spontaneously call SPD resupply, got {len(spd)} call(s)"
+                    f"Agent should call SPD resupply alongside missing_supply tasks, got 0 SPD calls"
                 )
             return errs
 
-        _run("no_spontaneous_spd", 5, event, "CASE-BENCH-2", checks)
+        _run("spd_with_missing_supply", 5, event, "CASE-BENCH-2", checks)
 
     def test_L5_06_procedure_change_no_green(self):
         """Procedure changed → yellow light (never green)."""

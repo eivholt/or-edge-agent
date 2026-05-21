@@ -29,6 +29,8 @@ from apps.agent.run_fixture import (
 )
 from apps.agent.validation import validate_decision
 
+# NOTE: ask_agent(event, resources) — agent fetches case internally via get_surgical_pathway tool
+
 
 RESOURCES = get_resources("OR-2")
 
@@ -58,8 +60,7 @@ MISSING_REQUIRED_EVENT = {
 @pytest.mark.llm
 def test_multiple_missing_required_items():
     """Two required items have deficit → agent should create tasks for both."""
-    case = get_case("CASE-INT-1")
-    decision = ask_agent(MISSING_REQUIRED_EVENT, case, RESOURCES)
+    decision = ask_agent(MISSING_REQUIRED_EVENT, RESOURCES)
     errors = validate_decision(decision, MISSING_REQUIRED_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -105,14 +106,17 @@ ALL_PRESENT_EVENT = {
 
 @pytest.mark.llm
 def test_all_present_fast_path():
-    """All required items visible → no LLM call, empty tool_calls."""
-    case = get_case("CASE-INT-2")
-    decision = ask_agent(ALL_PRESENT_EVENT, case, RESOURCES)
+    """All required items visible → green light, no task-creation calls."""
+    decision = ask_agent(ALL_PRESENT_EVENT, RESOURCES)
     errors = validate_decision(decision, ALL_PRESENT_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
-    assert decision["tool_calls"] == [], (
-        f"No tools should be called when everything is present: {decision}"
+    task_calls = [
+        c for c in decision["tool_calls"]
+        if c["name"] == "create_synthetic_or_task"
+    ]
+    assert task_calls == [], (
+        f"No tasks should be created when everything is present: {task_calls}"
     )
     assert decision["requires_human_review"] is False
 
@@ -141,14 +145,17 @@ MISSING_NOT_REQUIRED_EVENT = {
 
 @pytest.mark.llm
 def test_missing_items_not_required_no_task():
-    """Items flagged uncertain but counts meet requirements → fast path, no tasks."""
-    case = get_case("CASE-INT-3")
-    decision = ask_agent(MISSING_NOT_REQUIRED_EVENT, case, RESOURCES)
+    """Items flagged uncertain but counts meet requirements → no task-creation calls."""
+    decision = ask_agent(MISSING_NOT_REQUIRED_EVENT, RESOURCES)
     errors = validate_decision(decision, MISSING_NOT_REQUIRED_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
-    assert decision["tool_calls"] == [], (
-        f"No tasks should be created for items not in required_items: {decision}"
+    task_calls = [
+        c for c in decision["tool_calls"]
+        if c["name"] == "create_synthetic_or_task"
+    ]
+    assert task_calls == [], (
+        f"No tasks should be created for items not in required_items: {task_calls}"
     )
 
 
@@ -179,8 +186,7 @@ def test_mixed_missing_only_required_get_tasks():
     """scissors deficit (need 2, have 1) and tweezers deficit (need 2, have 1).
     sponge flagged but count meets requirement (need 4, have 4).
     Agent should create tasks for scissors and tweezers deficits."""
-    case = get_case("CASE-INT-4")
-    decision = ask_agent(MIXED_EVENT, case, RESOURCES)
+    decision = ask_agent(MIXED_EVENT, RESOURCES)
     errors = validate_decision(decision, MIXED_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -244,14 +250,17 @@ SPECIMEN_EVENT = {
 
 @pytest.mark.llm
 def test_specimen_event_all_present():
-    """Specimen container seen, all items present → no tasks."""
-    case = get_case("CASE-INT-6")
-    decision = ask_agent(SPECIMEN_EVENT, case, RESOURCES)
+    """Specimen container seen, all items present → no task-creation calls."""
+    decision = ask_agent(SPECIMEN_EVENT, RESOURCES)
     errors = validate_decision(decision, SPECIMEN_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
-    assert decision["tool_calls"] == [], (
-        f"All items present for specimen event, no tasks expected: {decision}"
+    task_calls = [
+        c for c in decision["tool_calls"]
+        if c["name"] == "create_synthetic_or_task"
+    ]
+    assert task_calls == [], (
+        f"All items present for specimen event, no tasks expected: {task_calls}"
     )
 
 
@@ -281,7 +290,7 @@ def test_unaccounted_items_get_tasks():
     recon = reconcile_setup(UNACCOUNTED_EVENT, case)
     assert sorted(recon["unaccounted"]) == ["scissors", "tweezers"]
 
-    decision = ask_agent(UNACCOUNTED_EVENT, case, RESOURCES)
+    decision = ask_agent(UNACCOUNTED_EVENT, RESOURCES)
     errors = validate_decision(decision, UNACCOUNTED_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -320,8 +329,7 @@ PROCEDURE_CHANGED_EVENT = {
 @pytest.mark.llm
 def test_procedure_changed_creates_review_and_hold():
     """Pathway changed after setup → procedure_change_review + porter_hold + yellow light."""
-    case = get_case("CASE-INT-10")
-    decision = ask_agent(PROCEDURE_CHANGED_EVENT, case, RESOURCES)
+    decision = ask_agent(PROCEDURE_CHANGED_EVENT, RESOURCES)
     errors = validate_decision(decision, PROCEDURE_CHANGED_EVENT)
     assert not errors, f"Validation errors: {errors}"
 
@@ -375,8 +383,7 @@ def test_sterile_zone_ambiguity_creates_human_review():
 
     The agent may attempt to set the prep light, but validation must reject
     actuation below confidence 0.8 — verifying the guardrail works."""
-    case = get_case("CASE-INT-11")
-    decision = ask_agent(STERILE_ZONE_EVENT, case, RESOURCES)
+    decision = ask_agent(STERILE_ZONE_EVENT, RESOURCES)
 
     task_calls = [
         c for c in decision["tool_calls"]
@@ -398,14 +405,18 @@ def test_sterile_zone_ambiguity_creates_human_review():
         f"Agent should not assert contaminated status: {summary}"
     )
 
-    # Validation guardrail: any set_or_prep_light at confidence < 0.8 is rejected
+    # Validation guardrail: light at confidence < 0.8 is only valid if VLM was called
     errors = validate_decision(decision, STERILE_ZONE_EVENT)
+    vlm_called = any(
+        c["name"] in ("inspect_scene_local", "inspect_scene_remote")
+        for c in decision["tool_calls"]
+    )
     light_calls = [
         c for c in decision["tool_calls"] if c["name"] == "set_or_prep_light"
     ]
-    if light_calls:
+    if light_calls and not vlm_called:
         assert any("cannot actuate below confidence" in e for e in errors), (
-            f"Validation should reject light actuation at confidence 0.72: {errors}"
+            f"Validation should reject light actuation at confidence 0.72 without VLM: {errors}"
         )
 
 

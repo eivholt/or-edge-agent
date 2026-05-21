@@ -13,10 +13,10 @@ Run with: pytest -m llm tests/test_vlm_inspect.py -v
 import pytest
 
 from apps.vlm.ask_vlm import ask_vlm
-from apps.agent.run_fixture import ask_agent, get_case, get_resources
+from apps.agent.run_fixture import ask_agent, get_resources
 from apps.agent.validation import validate_decision
 
-IMAGE_PATH = "data/surgery_tools_1024.jpg"
+IMAGE_PATH = "data/frames/frame_missing_scissors.jpg"
 RESOURCES = get_resources("OR-2")
 
 
@@ -63,8 +63,7 @@ def test_agent_handles_uncertain_event_with_missing_required():
     The agent may optionally call inspect_scene to verify, then should
     create a missing_supply or human_review task.
     """
-    case = get_case("CASE-VLM")
-    decision = ask_agent(EVENT_UNCERTAIN, case, RESOURCES)
+    decision = ask_agent(EVENT_UNCERTAIN, RESOURCES)
     errors = validate_decision(decision, EVENT_UNCERTAIN)
     assert not errors, f"Validation errors: {errors}"
 
