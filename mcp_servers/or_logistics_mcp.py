@@ -63,7 +63,7 @@ def request_spd_resupply(item_name: str, room_id: str, urgency: str) -> dict:
 
 
 @mcp.tool()
-def set_or_prep_light(room_id: str, color: str, duration_seconds: int) -> dict:
+def set_or_prep_light(room_id: str, color: str) -> dict:
     """
     Set the demo OR prep status light.
 
@@ -71,17 +71,14 @@ def set_or_prep_light(room_id: str, color: str, duration_seconds: int) -> dict:
     Use yellow for review-needed state.
     Use red only for high-confidence simulated safety or custody exceptions.
     Never use this as a real clinical alarm.
-    Duration must be between 1 and 10 seconds.
+    Light stays on until the next agent run.
     """
     if color not in {"green", "yellow", "red"}:
         return {"error": "color must be green, yellow, or red"}
-    if duration_seconds < 1 or duration_seconds > 10:
-        return {"error": "duration_seconds must be between 1 and 10"}
 
     return {
         "room_id": room_id,
         "color": color,
-        "duration_seconds": duration_seconds,
         "status": "set"
     }
 

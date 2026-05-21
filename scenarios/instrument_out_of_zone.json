@@ -3,17 +3,9 @@
   "room_id": "OR-2",
   "case_id": "CASE-1042",
   "event_type": "instrument_out_of_zone",
-  "visible_items": {
-    "scalpel": 2,
-    "scissors": 2,
-    "sponge": 4,
-    "tweezers": 3,
-    "suction_tip": 1
-  },
-  "missing_or_uncertain": [],
   "zone": "back_table",
   "confidence": 0.72,
-  "image_path": "frames/frame_instrument_out_of_zone.jpg",
+  "image_path": "frames/frame_instrument_out_of_zone.png",
   "timestamp": "2026-05-16T09:15:00+02:00",
   "vlm_hint": "A scalpel appears to have been placed outside the sterile drape boundary."
 }

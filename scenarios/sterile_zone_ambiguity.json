@@ -3,19 +3,8 @@
   "room_id": "OR-2",
   "case_id": "CASE-1042",
   "event_type": "sterile_zone_ambiguity",
-  "visible_items": {
-    "scalpel": 2,
-    "scissors": 2,
-    "sponge": 4,
-    "tweezers": 3,
-    "suction_tip": 1
-  },
-  "missing_or_uncertain": [
-    "scissors",
-    "tweezers"
-  ],
   "zone": "back_table",
   "confidence": 0.62,
-  "image_path": "frames/frame_sterile_zone_ambiguity.jpg",
+  "image_path": "frames/frame_sterile_zone_ambiguity.png",
   "timestamp": "2026-05-15T13:30:00+02:00"
 }

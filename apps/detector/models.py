@@ -19,8 +19,8 @@ class ORSceneEvent(BaseModel):
         "room_turnover_check",
         "ppe_compliance_check",
     ]
-    visible_items: dict[str, int]
-    missing_or_uncertain: list[str]
+    visible_items: dict[str, int] = Field(default_factory=dict)
+    missing_or_uncertain: list[str] = Field(default_factory=list)
     zone: str
     confidence: float = Field(ge=0.0, le=1.0)
     image_path: str | None = None

@@ -38,7 +38,7 @@ def should_call_vlm(event: dict) -> bool:
         return True
     if event["event_type"] in VLM_TRIGGER_EVENT_TYPES:
         return True
-    if event["missing_or_uncertain"]:
+    if event.get("missing_or_uncertain"):
         return True
     return False
 
@@ -79,9 +79,6 @@ def validate_decision(decision: dict, event: dict) -> list[str]:
         if name == "set_or_prep_light":
             if args.get("color") not in ALLOWED_LIGHTS:
                 errors.append(f"tool_calls[{i}] invalid light color")
-            duration = args.get("duration_seconds")
-            if not isinstance(duration, int) or not (1 <= duration <= 10):
-                errors.append(f"tool_calls[{i}] invalid duration_seconds")
             # Allow actuation below 0.8 if VLM was invoked first
             vlm_invoked = any(
                 c.get("name") in ("inspect_scene_local", "inspect_scene_remote")

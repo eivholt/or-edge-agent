@@ -124,7 +124,6 @@ def reconcile(event: dict, case: dict) -> list[dict]:
             "arguments": {
                 "room_id": event.get("room_id", "OR-?"),
                 "color": "yellow",
-                "duration_seconds": 10,
             },
         })
 

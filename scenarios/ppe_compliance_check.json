@@ -3,11 +3,10 @@
   "room_id": "OR-2",
   "case_id": "CASE-5001",
   "event_type": "ppe_compliance_check",
-  "visible_items": {},
-  "missing_or_uncertain": [],
   "zone": "full_room",
   "confidence": 0.60,
   "image_path": "frames/frame_ppe_compliance_check.png",
   "timestamp": "2026-05-16T08:30:00+02:00",
-  "vlm_hint": "One person near the instrument table does not appear to be wearing a surgical mask."
+  "vlm_hint": "Focus on the person in the FOREGROUND standing at the instrument table. Check if their mouth and nose are covered by a surgical mask. The person in the background is irrelevant.",
+  "vlm_question": "Look at the person in the foreground who is standing directly at the instrument table. Is their mouth and nose covered by a surgical mask? Answer only YES or NO, then explain what you see on their face."
 }

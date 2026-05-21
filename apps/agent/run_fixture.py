@@ -42,16 +42,20 @@ Rules:
 
 1. all_present=true, empty proposed_tool_calls → set_or_prep_light green, short summary. No tasks.
 
-2. proposed_tool_calls not empty → execute each proposed call exactly as given. Do not change task_type.
+2. proposed_tool_calls not empty → execute each proposed call exactly as given. Do not change task_type. Then set_or_prep_light yellow.
 
 3. visually_ready_but_pathway_changed → proposed_tool_calls includes procedure_change_review + porter_hold + yellow light. Execute all of them, plus any deficit tasks.
 
 4. VLM events (confidence_level="low" or these event_types) → call inspect_scene_local FIRST:
    - instrument_out_of_zone → human_review + yellow light
-   - specimen_ready_check → specimen_handoff or human_review
+   - specimen_ready_check → specimen_handoff or human_review + yellow light
    - room_turnover_check → porter_hold + red light
-   - ppe_compliance_check → human_review + yellow light
+   - ppe_compliance_check → human_review + yellow light UNLESS VLM explicitly says YES (compliant)
+   If the event contains a "vlm_question" field, use that EXACT text as the question for inspect_scene_local.
+   For ppe_compliance_check: if the VLM answer does NOT start with "YES", treat it as non-compliant and create human_review + yellow light.
    Only use inspect_scene_remote as cloud fallback if local VLM fails.
+
+IMPORTANT: Every scenario MUST end with exactly one set_or_prep_light call. Green = no issues, Yellow = action needed, Red = critical.
 
 Never actuate (set_or_prep_light) when confidence_level is "low" unless VLM has confirmed.
 Use request_spd_resupply only when explicitly told to order sterile resupply.
@@ -153,7 +157,6 @@ def set_or_prep_light(
     ctx: RunContext[AgentDeps],
     room_id: str,
     color: str,
-    duration_seconds: int,
 ) -> dict:
     """Set the OR prep status light.
 
@@ -164,12 +167,10 @@ def set_or_prep_light(
     Args:
         room_id: The OR room identifier.
         color: One of green, yellow, red.
-        duration_seconds: Duration in seconds (1-10).
     """
     return {
         "room_id": room_id,
         "color": color,
-        "duration_seconds": duration_seconds,
         "status": "set",
     }
 
@@ -190,6 +191,11 @@ def inspect_scene_local(
         image_path: Path to an image file (relative to data/ or absolute).
         question: What to ask the VLM about the image.
     """
+    # Override question with vlm_question from event if available
+    vlm_q = ctx.deps.event.get("vlm_question")
+    if vlm_q:
+        question = vlm_q
+
     resolved = Path(image_path)
     if not resolved.is_absolute():
         resolved = DATA_DIR / image_path
@@ -259,6 +265,11 @@ def inspect_scene_remote(
         image_path: Path to an image file (relative to data/ or absolute).
         question: What to ask the VLM about the image.
     """
+    # Override question with vlm_question from event if available
+    vlm_q = ctx.deps.event.get("vlm_question")
+    if vlm_q:
+        question = vlm_q
+
     from apps.vlm.ask_vlm import ask_vlm
 
     resolved = Path(image_path)
@@ -348,6 +359,16 @@ def reconcile_setup(event: dict, case: dict) -> dict:
         if item not in missing and visible.get(item, 0) < need
     )
 
+    # Build detailed lists with have/need counts for dashboard display
+    actionable_missing_detail = [
+        f"{item} ({visible.get(item, 0)}/{required[item]})"
+        for item in actionable_missing
+    ]
+    unaccounted_detail = [
+        f"{item} ({visible.get(item, 0)}/{required[item]})"
+        for item in unaccounted
+    ]
+
     truly_clear = len(calls) == 0 and not actionable_missing and not unaccounted
 
     # Categorical confidence label for LLM consumption
@@ -360,8 +381,10 @@ def reconcile_setup(event: dict, case: dict) -> dict:
     return {
         "confidence_level": confidence_level,
         "actionable_missing": actionable_missing,
+        "actionable_missing_detail": actionable_missing_detail,
         "flagged_no_deficit": flagged_no_deficit,
         "unaccounted": unaccounted,
+        "unaccounted_detail": unaccounted_detail,
         "all_present": truly_clear,
         "proposed_tool_calls": calls,
     }

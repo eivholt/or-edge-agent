@@ -4,6 +4,7 @@ import asyncio
 import json
 import subprocess
 import sys
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -221,9 +222,21 @@ def _run_pipeline(scenario_path: str):
         from apps.detector.inference import detect
         det_result = detect(frame)
         if det_result.annotated_path:
-            detection_image_url = f"/data/{det_result.annotated_path}"
+            cache_bust = int(time.time() * 1000)
+            detection_image_url = f"/data/{det_result.annotated_path}?t={cache_bust}"
             inference_ms = det_result.inference_ms
             detected_labels = [d.label for d in det_result.detections]
+
+    # Cache-bust the frame image URL too
+    if image_url:
+        cache_bust = int(time.time() * 1000)
+        image_url = f"{image_url}?t={cache_bust}"
+
+    # Use actual EI model detections as visible_items for reconciliation
+    if detected_labels:
+        from collections import Counter
+        detected_counts = dict(Counter(detected_labels))
+        event["visible_items"] = detected_counts
 
     visible = event.get("visible_items", {})
     total_visible = sum(visible.values()) if isinstance(visible, dict) else len(visible)
@@ -232,7 +245,7 @@ def _run_pipeline(scenario_path: str):
           event_type=event.get("event_type"),
           confidence=event.get("confidence"),
           visible_items=visible,
-          missing_items=event.get("missing_or_uncertain", []),
+          missing_items=event.get("missing_or_uncertain", []) if not detected_labels else [],
           image_url=image_url,
           detection_image_url=detection_image_url,
           inference_ms=inference_ms,
@@ -259,8 +272,8 @@ def _run_pipeline(scenario_path: str):
     recon = reconcile_setup(event, case)
     _emit("reconcile",
           all_present=recon["all_present"],
-          actionable_missing=recon["actionable_missing"],
-          unaccounted=recon["unaccounted"],
+          actionable_missing=recon.get("actionable_missing_detail", recon["actionable_missing"]),
+          unaccounted=recon.get("unaccounted_detail", recon["unaccounted"]),
           detail=_reconcile_detail(recon))
 
     # 4. Resources (queried as part of agent context)
@@ -311,8 +324,8 @@ def _run_pipeline(scenario_path: str):
         elif name == "set_or_prep_light":
             _emit("prep_light",
                   color=args.get("color", "yellow"),
-                  duration_seconds=args.get("duration_seconds"),
-                  detail=f"Set to {args.get('color')} for {args.get('duration_seconds')}s")
+                  reason=decision.get("decision_summary", ""),
+                  detail=f"Set to {args.get('color')}")
         elif name in ("request_spd_resupply", "request_spd_robot_delivery"):
             _emit("spd",
                   item_name=args.get("item_name"),

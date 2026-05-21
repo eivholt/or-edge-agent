@@ -118,11 +118,12 @@
   .conn-group {
     display: flex; flex-direction: column; align-items: center; gap: .2rem;
   }
-  .conn-arrow { font-size: 1.2rem; color: var(--border); transition: color .3s; line-height: 1; }
+  .conn-arrow { font-size: 1.6rem; color: var(--border); transition: color .3s; line-height: 1; font-weight: 900; }
   .conn-arrow.active { color: var(--accent); }
   .conn-label {
-    font-size: .5rem; color: var(--muted); text-align: center;
-    text-transform: uppercase; letter-spacing: .06em; line-height: 1.3;
+    font-size: .7rem; color: var(--text); text-align: center;
+    text-transform: uppercase; letter-spacing: .08em; line-height: 1.3;
+    font-weight: 700; opacity: .85;
     writing-mode: vertical-lr; text-orientation: mixed;
   }
 
@@ -187,7 +188,7 @@
     max-height: 80px; overflow: hidden; position: relative;
   }
   #body-agent { max-height: 120px; }
-  .node-body.expanded { max-height: none; overflow: visible; }
+  .node-body.expanded { max-height: none; overflow: auto; }
   .node-body code {
     background: rgba(255,255,255,.08); padding: .1em .3em; border-radius: 4px;
     font-size: .64rem; font-family: 'JetBrains Mono','Fira Code',monospace;
@@ -256,9 +257,9 @@
   /* ── MCP tooltip ─────────────────────────────────── */
   .mcp-tooltip {
     display: none; position: absolute; bottom: calc(100% + 8px); left: 0;
-    min-width: 240px; max-width: 340px;
+    min-width: 320px; max-width: 520px;
     background: #1e2030; border: 1px solid var(--border); border-radius: 8px;
-    padding: .45rem .55rem; font-size: .58rem; color: var(--text);
+    padding: .6rem .75rem; font-size: .75rem; color: var(--text);
     box-shadow: 0 4px 20px rgba(0,0,0,.5); z-index: 100;
   }
   .mcp-tooltip::after {
@@ -266,14 +267,14 @@
     width: 100%; height: 12px; background: transparent;
   }
   .mcp-pill:hover .mcp-tooltip { display: block; }
-  .tt-title { font-weight: 700; font-size: .56rem; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); margin-bottom: .3rem; }
-  .tt-entry { padding: .2rem 0; border-bottom: 1px solid rgba(255,255,255,.04); }
+  .tt-title { font-weight: 700; font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--accent); margin-bottom: .35rem; }
+  .tt-entry { padding: .25rem 0; border-bottom: 1px solid rgba(255,255,255,.04); }
   .tt-entry:last-child { border-bottom: none; }
-  .tt-name { font-weight: 600; color: var(--text); font-size: .58rem; }
-  .tt-args { color: var(--muted); font-size: .52rem; word-break: break-word; line-height: 1.3; }
-  .tt-args code { background: rgba(255,255,255,.06); padding: .05em .15em; border-radius: 2px; font-family: 'JetBrains Mono',monospace; font-size: .5rem; }
-  .tt-result { color: var(--green); font-size: .52rem; }
-  .tt-empty { color: var(--muted); font-style: italic; font-size: .56rem; }
+  .tt-name { font-weight: 600; color: var(--text); font-size: .75rem; }
+  .tt-args { color: var(--muted); font-size: .7rem; word-break: break-word; line-height: 1.4; }
+  .tt-args code { background: rgba(255,255,255,.06); padding: .05em .2em; border-radius: 2px; font-family: 'JetBrains Mono',monospace; font-size: .65rem; }
+  .tt-result { color: var(--green); font-size: .7rem; }
+  .tt-empty { color: var(--muted); font-style: italic; font-size: .7rem; }
 
   /* ── Log component icon ─────────────────────────── */
   .log-icon {
@@ -284,7 +285,7 @@
   /* ── Flow arrows ────────────────────────────────────── */
   .flow-arrow {
     display: flex; justify-content: center; color: var(--border);
-    font-size: .8rem; transition: color .3s; padding: 0;
+    font-size: 1.1rem; transition: color .3s; padding: 0; font-weight: 900;
   }
   .flow-arrow.active { color: var(--accent); }
 
@@ -318,6 +319,8 @@
   .light-bulb.yellow.on { background: var(--yellow); color: var(--yellow); }
   .light-bulb.red { border-color: var(--red); }
   .light-bulb.red.on { background: var(--red); color: var(--red); }
+  .light-reason { font-size: .65rem; color: var(--muted); margin-top: .35rem; line-height: 1.35; display: none; }
+  .light-reason.visible { display: block; }
 
   /* ── VLM thumbnails ─────────────────────────────────── */
   .vlm-thumb {
@@ -463,6 +466,7 @@
             <div class="light-bulb yellow" id="light-yellow"></div>
             <div class="light-bulb red" id="light-red"></div>
           </div>
+          <div class="light-reason" id="light-reason"></div>
         </div>
       </div>
 
@@ -779,6 +783,9 @@ function resetPipeline() {
     // Remove Show more/less toggles
     const toggle = el && el.parentElement.querySelector('.body-toggle');
     if (toggle) toggle.remove();
+    // Remove expanded z-index from parent node
+    const node = el && el.closest('.node');
+    if (node) node.classList.remove('node-expanded');
   });
 
   // Reset validation checklist
@@ -789,12 +796,18 @@ function resetPipeline() {
     const el = document.getElementById('light-' + c);
     if (el) el.classList.remove('on');
   });
+  const reasonEl = document.getElementById('light-reason');
+  if (reasonEl) { reasonEl.textContent = ''; reasonEl.classList.remove('visible'); }
 
   // Reset detector image + overlay
   if (detectorImage) { detectorImage.style.display = 'none'; }
   if (detectorPlaceholder) { detectorPlaceholder.style.display = ''; }
   const overlay = document.getElementById('detectorOverlay');
   if (overlay) { overlay.style.display = 'none'; }
+
+  // Clear event log
+  const log = document.getElementById('eventLog');
+  if (log) log.innerHTML = '';
 }
 
 function handleEvent(ev) {
@@ -815,7 +828,7 @@ function handleEvent(ev) {
   activateArrows(comp);
   activateConnectors(comp);
   updateBody(comp, ev);
-  if (comp === 'prep_light' && ev.color) setLight(ev.color);
+  if (comp === 'prep_light' && ev.color) setLight(ev.color, ev.reason);
   if (comp === 'detector' && ev.image_url) showDetectorImage(ev.image_url);
   if (comp === 'detector' && ev.detection_image_url) showDetectionOverlay(ev.detection_image_url);
   if (comp === 'tool_call') activateTool(ev);
@@ -895,6 +908,8 @@ function maybeAddToggle(body) {
       toggle.textContent = '▸ Show more';
       toggle.onclick = function() {
         const expanded = body.classList.toggle('expanded');
+        const node = body.closest('.node');
+        if (node) node.classList.toggle('node-expanded', expanded);
         toggle.textContent = expanded ? '▾ Show less' : '▸ Show more';
       };
       body.parentElement.appendChild(toggle);
@@ -975,11 +990,11 @@ function activateTool(ev) {
       let html = '<span class="tt-name">' + esc(name) + '</span>';
       if (ev.tool_args) {
         const args = typeof ev.tool_args === 'string' ? ev.tool_args : JSON.stringify(ev.tool_args);
-        html += '<div class="tt-args">→ <code>' + esc(truncate(args, 120)) + '</code></div>';
+        html += '<div class="tt-args">→ <code>' + esc(truncate(args, 300)) + '</code></div>';
       }
       if (ev.tool_result) {
         const res = typeof ev.tool_result === 'string' ? ev.tool_result : JSON.stringify(ev.tool_result);
-        html += '<div class="tt-result">← ' + esc(truncate(res, 100)) + '</div>';
+        html += '<div class="tt-result">← ' + esc(truncate(res, 300)) + '</div>';
       }
       entry.innerHTML = html;
       tt.appendChild(entry);
@@ -1021,13 +1036,13 @@ function updateBody(comp, ev) {
     if (ev.confidence != null) meta.push('Confidence: <code>' + ev.confidence + '</code>');
     if (ev.inference_ms != null) meta.push('Inference: <code>' + ev.inference_ms.toFixed(0) + ' ms</code>');
     if (meta.length) html += meta.join(' · ') + '<br>';
-    if (ev.visible_items) {
-      if (typeof ev.visible_items === 'object' && !Array.isArray(ev.visible_items)) {
-        const items = Object.entries(ev.visible_items).map(([k,v]) => k + ': ' + v).join(', ');
-        html += 'Detected: <code>' + esc(items) + '</code><br>';
-      } else {
-        html += 'Visible: <code>' + esc(ev.visible_items.join(', ')) + '</code><br>';
-      }
+    if (ev.detected_labels && ev.detected_labels.length) {
+      const counts = {};
+      ev.detected_labels.forEach(l => { counts[l] = (counts[l] || 0) + 1; });
+      const items = Object.entries(counts).map(([k,v]) => k + ': ' + v).join(', ');
+      html += 'Detected: <code>' + esc(items) + '</code><br>';
+    } else {
+      html += 'Detected: <code>none</code><br>';
     }
     if (ev.missing_items && ev.missing_items.length) html += 'Missing: <code>' + esc(ev.missing_items.join(', ')) + '</code>';
     body.innerHTML = html || esc(detail) || 'Active';
@@ -1041,23 +1056,15 @@ function updateBody(comp, ev) {
     let html = '';
     if (ev.status) html += 'Status: <code>' + esc(ev.status) + '</code><br>';
     if (ev.tool_calls != null) html += 'Tool calls: <code>' + ev.tool_calls + '</code><br>';
-    if (ev.summary) html += esc(ev.summary);
-    body.innerHTML = html || esc(detail) || 'Active';
-    // Show full summary as native tooltip when clipped
-    requestAnimationFrame(() => {
-      if (body.scrollHeight > body.clientHeight + 2 && ev.summary) {
-        body.title = ev.summary;
-      } else {
-        body.removeAttribute('title');
-      }
-    });
+    if (ev.summary) html += renderMd(ev.summary);
+    body.innerHTML = html || renderMd(detail) || 'Active';
     maybeAddToggle(body);
   } else if (comp === 'tasks') {
     let html = '';
     if (ev.task_type) html += '<code>' + esc(ev.task_type) + '</code> ';
     if (ev.priority) html += '[' + esc(ev.priority) + ']<br>';
-    if (ev.summary) html += esc(ev.summary);
-    body.innerHTML = html || esc(detail) || 'Created';
+    if (ev.summary) html += renderMd(ev.summary);
+    body.innerHTML = html || renderMd(detail) || 'Created';
   } else if (comp === 'prep_light') {
     const meanings = {
       green: 'All items verified — ready for procedure',
@@ -1066,11 +1073,10 @@ function updateBody(comp, ev) {
     };
     let html = '';
     if (ev.color) {
-      html += '<span style="font-weight:600;color:var(--' + ev.color + ',inherit)">' + esc(ev.color.toUpperCase()) + '</span>';
-      html += ' — ' + (ev.duration_seconds || '?') + 's<br>';
+      html += '<span style="font-weight:600;color:var(--' + ev.color + ',inherit)">' + esc(ev.color.toUpperCase()) + '</span><br>';
       html += '<span style="font-size:.85em;opacity:.85">' + (meanings[ev.color] || 'Unknown state') + '</span>';
     } else {
-      html = esc(detail);
+      html = renderMd(detail);
     }
     body.innerHTML = html;
   } else if (comp === 'spd') {
@@ -1081,14 +1087,14 @@ function updateBody(comp, ev) {
   } else if (comp === 'vlm_local') {
     let html = '';
     if (ev.question) html += '<span style="color:var(--muted)">Q:</span> ' + esc(ev.question) + '<br>';
-    if (ev.answer) html += '<span style="color:var(--yellow)">A:</span> ' + esc(ev.answer);
-    body.innerHTML = html || esc(detail) || 'Active';
+    if (ev.answer) html += '<span style="color:var(--yellow)">A:</span> ' + renderMd(ev.answer);
+    body.innerHTML = html || renderMd(detail) || 'Active';
     maybeAddToggle(body);
   } else if (comp === 'vlm_remote') {
     let html = '';
     if (ev.question) html += '<span style="color:var(--muted)">Q:</span> ' + esc(ev.question) + '<br>';
-    if (ev.answer) html += '<span style="color:var(--purple)">A:</span> ' + esc(ev.answer);
-    body.innerHTML = html || esc(detail) || 'Active';
+    if (ev.answer) html += '<span style="color:var(--purple)">A:</span> ' + renderMd(ev.answer);
+    body.innerHTML = html || renderMd(detail) || 'Active';
     if (ev.image_url) { const vt = document.getElementById('vlm-remote-thumb'); if (vt) { vt.src = ev.image_url; vt.style.display = 'block'; } }
     maybeAddToggle(body);
   } else if (comp === 'tool_call') {
@@ -1130,10 +1136,20 @@ function updateBody(comp, ev) {
   }
 }
 
-function setLight(color) {
+function setLight(color, reason) {
   ['green','yellow','red'].forEach(c => document.getElementById('light-'+c).classList.remove('on'));
   const el = document.getElementById('light-'+color);
   if (el) el.classList.add('on');
+  const reasonEl = document.getElementById('light-reason');
+  if (reasonEl) {
+    if (reason) {
+      reasonEl.innerHTML = renderMd(reason);
+      reasonEl.classList.add('visible');
+    } else {
+      reasonEl.textContent = '';
+      reasonEl.classList.remove('visible');
+    }
+  }
 }
 
 function addLog(ev) {
@@ -1146,7 +1162,7 @@ function addLog(ev) {
   const compName = formatComponent(ev.component);
 
   // Tool call entries show tool name in detail
-  let detailHtml = esc(truncate(detail, 180));
+  let detailHtml = renderMd(truncate(detail, 180));
   if (ev.component === 'tool_call' && ev.tool_name) {
     detailHtml = '<code>' + esc(ev.tool_name) + '</code> ' + detailHtml;
   }
@@ -1170,6 +1186,19 @@ function formatComponent(c) {
 
 function truncate(s, n) { return s && s.length > n ? s.slice(0, n) + '\u2026' : s; }
 function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;') : ''; }
+function renderMd(s) {
+  if (!s) return '';
+  let h = esc(s);
+  // headings (###, ##, #) — must run before \n→<br>
+  h = h.replace(/(^|\n)#{3}\s+(.+?)(?=\n|$)/g, '$1<strong style="font-size:.85rem">$2</strong>');
+  h = h.replace(/(^|\n)#{2}\s+(.+?)(?=\n|$)/g, '$1<strong style="font-size:.9rem">$2</strong>');
+  h = h.replace(/(^|\n)#\s+(.+?)(?=\n|$)/g, '$1<strong style="font-size:.95rem">$2</strong>');
+  h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
+  h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+  h = h.replace(/\n/g, '<br>');
+  return h;
+}
 
 // ── Quick Scenario Runner ───────────────────────────
 async function runScenario(name) {

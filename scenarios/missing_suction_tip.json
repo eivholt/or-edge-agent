@@ -3,15 +3,6 @@
   "room_id": "OR-2",
   "case_id": "CASE-1042",
   "event_type": "or_setup_state_change",
-  "visible_items": {
-    "scalpel": 2,
-    "scissors": 2,
-    "sponge": 4,
-    "tweezers": 2
-  },
-  "missing_or_uncertain": [
-    "suction_tip"
-  ],
   "zone": "back_table",
   "confidence": 0.82,
   "image_path": "frames/frame_missing_suction_tip.jpg",

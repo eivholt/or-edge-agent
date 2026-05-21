@@ -28,11 +28,10 @@ def test_missing_scissors():
     data = json.loads((SCENARIOS_DIR / "missing_scissors.json").read_text())
     event = ORSceneEvent.model_validate(data)
     assert event.event_type == "or_setup_state_change"
-    assert "scissors" in event.missing_or_uncertain
-    assert "tweezers" in event.missing_or_uncertain
-    # visible_items has reduced counts
-    assert event.visible_items["scissors"] == 1
-    assert event.visible_items["tweezers"] == 1
+    # visible_items and missing_or_uncertain now default to empty
+    # (populated at runtime by EI inference)
+    assert event.visible_items == {}
+    assert event.missing_or_uncertain == []
 
 
 def test_rejects_invalid_confidence():

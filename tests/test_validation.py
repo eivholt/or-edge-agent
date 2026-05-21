@@ -19,8 +19,7 @@ def test_rejects_actuation_with_low_confidence():
                 "name": "set_or_prep_light",
                 "arguments": {
                     "room_id": "OR-2",
-                    "color": "yellow",
-                    "duration_seconds": 5
+                    "color": "yellow"
                 }
             }
         ]

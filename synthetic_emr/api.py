@@ -16,10 +16,10 @@ CASES = {
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {
-            "scalpel": 2,
-            "scissors": 2,
-            "sponge": 4,
-            "tweezers": 2,
+            "scalpel": 1,
+            "scissors": 3,
+            "sponge": 2,
+            "tweezers": 4,
             "suction_tip": 1
         },
         "open_items": [
