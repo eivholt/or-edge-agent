@@ -178,18 +178,19 @@ def _reconcile_detail(recon: dict) -> str:
 
 
 @app.post("/run/{scenario}")
-async def run_scenario(scenario: str):
+async def run_scenario(scenario: str, offline: str = ""):
     """Run a scenario through the agent pipeline and stream events to SSE."""
     scenario_file = SCENARIOS_DIR / f"{scenario}.json"
     if not scenario_file.exists():
         return {"error": f"Scenario {scenario} not found"}
 
+    cloud_connected = not bool(offline)
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _run_pipeline, str(scenario_file))
+    await loop.run_in_executor(None, _run_pipeline, str(scenario_file), cloud_connected)
     return {"ok": True}
 
 
-def _run_pipeline(scenario_path: str):
+def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     """Execute the full agent pipeline, emitting events at each step."""
     import httpx
 
@@ -255,9 +256,8 @@ def _run_pipeline(scenario_path: str):
 
     # 2. Fetch case from EMR (via synthetic-emr MCP → EMR API)
     case_id = event["case_id"]
-    _emit("tool_call",
-          tool_name="get_surgical_pathway",
-          tool_args={"case_id": case_id},
+    _emit("pipeline",
+          step="get_surgical_pathway",
           detail=f"get_surgical_pathway(case_id={case_id})")
     r = httpx.get(f"http://localhost:9000/cases/{case_id}", timeout=10)
     r.raise_for_status()
@@ -279,21 +279,21 @@ def _run_pipeline(scenario_path: str):
     # 4. Resources (queried as part of agent context)
     resources = {
         "room_id": event.get("room_id", "OR-?"),
+        "cloud_connected": cloud_connected,
         "sterile_processing_robot": {"available": True, "eta_seconds": 180},
         "human_runner": {"available": True, "eta_seconds": 420},
         "porter": {"available": True, "eta_seconds": 300},
     }
-    _emit("tool_call",
-          tool_name="get_available_or_resources",
-          tool_args={"room_id": event.get("room_id", "OR-?")},
-          tool_result={"robot": "180s", "runner": "420s", "porter": "300s"},
-          detail="get_available_or_resources → 3 resources")
+    conn_label = "online" if cloud_connected else "OFFLINE"
+    _emit("pipeline",
+          step="get_available_or_resources",
+          detail=f"get_available_or_resources → cloud={conn_label}")
 
     # 5. Agent decision (import inline to avoid circular / heavy load)
     _emit("agent", status="thinking", detail="LLM processing…")
 
     from apps.agent.run_fixture import ask_agent
-    decision = ask_agent(event, case, resources)
+    decision = ask_agent(event, case, resources, emit=_emit)
 
     tool_calls = decision.get("tool_calls", [])
     _emit("agent",
@@ -302,49 +302,7 @@ def _run_pipeline(scenario_path: str):
           summary=decision.get("decision_summary", ""),
           detail=f"{len(tool_calls)} tool call(s)")
 
-    # 6. Emit individual tool call results
-    for tc in tool_calls:
-        name = tc.get("name", "")
-        args = tc.get("arguments", {})
-
-        # Always emit tool_call to light up the MCP sub-node
-        _emit("tool_call",
-              tool_name=name,
-              tool_args=args,
-              tool_result=tc.get("result", {}),
-              detail=f"{name}({', '.join(f'{k}={v}' for k,v in list(args.items())[:3])})")
-
-        # Also emit to the external service nodes
-        if name == "create_synthetic_or_task":
-            _emit("tasks",
-                  task_type=args.get("task_type"),
-                  priority=args.get("priority"),
-                  summary=args.get("summary", ""),
-                  detail=args.get("summary", ""))
-        elif name == "set_or_prep_light":
-            _emit("prep_light",
-                  color=args.get("color", "yellow"),
-                  reason=decision.get("decision_summary", ""),
-                  detail=f"Set to {args.get('color')}")
-        elif name in ("request_spd_resupply", "request_spd_robot_delivery"):
-            _emit("spd",
-                  item_name=args.get("item_name"),
-                  urgency=args.get("urgency"),
-                  detail=f"{'Robot' if 'robot' in name else 'Runner'}: {args.get('item_name')}")
-        elif name == "inspect_scene_local":
-            _emit("vlm_local",
-                  question=args.get("question", ""),
-                  answer=tc.get("result", {}).get("answer", "") if isinstance(tc.get("result"), dict) else str(tc.get("result", "")),
-                  detail=f"Local VLM: {args.get('question', '')[:80]}")
-        elif name == "inspect_scene_remote":
-            result = tc.get("result", {})
-            _emit("vlm_remote",
-                  question=args.get("question", ""),
-                  answer=result.get("answer", "") if isinstance(result, dict) else str(result),
-                  image_url=image_url,
-                  detail=f"Remote VLM (GPT-4o): {args.get('question', '')[:80]}")
-
-    # 7. Validation
+    # 6. Validation
     errors = validate_decision(decision, event)
     _emit("validation",
           errors=errors,

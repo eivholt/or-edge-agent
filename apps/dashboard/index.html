@@ -336,6 +336,44 @@
 
   /* ── Sidebar ────────────────────────────────────────── */
   .sidebar h2 { font-size: .85rem; font-weight: 600; margin-bottom: .75rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+
+  /* ── Toggle Switch ──────────────────────────────────── */
+  .toggle-row {
+    display: flex; align-items: center; gap: .6rem; margin-bottom: .75rem;
+    padding: .5rem .6rem; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; font-size: .75rem;
+  }
+  .toggle-row label { color: var(--text); cursor: pointer; user-select: none; }
+  .toggle-switch { position: relative; width: 36px; height: 20px; flex-shrink: 0; }
+  .toggle-switch input { position: absolute; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; z-index: 2; }
+  .toggle-slider {
+    position: absolute; inset: 0; background: var(--border); border-radius: 10px;
+    cursor: pointer; transition: background .25s;
+  }
+  .toggle-slider::before {
+    content: ''; position: absolute; left: 2px; top: 2px; width: 16px; height: 16px;
+    background: #fff; border-radius: 50%; transition: transform .25s;
+  }
+  .toggle-switch input:checked + .toggle-slider { background: #f59e0b; }
+  .toggle-switch input:checked + .toggle-slider::before { transform: translateX(16px); }
+  .offline-badge {
+    font-size: .6rem; text-transform: uppercase; letter-spacing: .06em;
+    padding: .1rem .35rem; border-radius: 4px; font-weight: 700;
+  }
+  .offline-badge.online { background: #22c55e22; color: #22c55e; }
+  .offline-badge.offline { background: #f59e0b22; color: #f59e0b; }
+
+  /* ── Node offline state ─────────────────────────────── */
+  .node.node-offline { opacity: .35; pointer-events: none; filter: grayscale(.6); transition: opacity .3s, filter .3s; }
+
+  /* ── VLM verdict badge ──────────────────────────────── */
+  .vlm-verdict {
+    display: inline-block; font-size: .65rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; padding: .15rem .45rem; border-radius: 4px; margin-bottom: .35rem;
+  }
+  .vlm-verdict.pass { background: #22c55e22; color: #22c55e; }
+  .vlm-verdict.fail { background: #ef444422; color: #ef4444; }
+  .vlm-verdict.inconclusive { background: #f59e0b22; color: #f59e0b; }
   .event-log { display: flex; flex-direction: column; gap: .5rem; }
   .log-entry {
     background: var(--bg); border: 1px solid var(--border); border-radius: 8px;
@@ -357,6 +395,7 @@
   .log-entry[data-component="validation"] { border-left-color: #a855f7; }
   .log-entry[data-component="tasks"]      { border-left-color: var(--green); }
   .log-entry[data-component="tool_call"]  { border-left-color: var(--cyan); }
+  .log-entry[data-component="pipeline"]    { border-left-color: #71717a; }
   @keyframes slide-in { from{opacity:0;transform:translateY(-8px)} to{opacity:1;transform:translateY(0)} }
 
   /* ── Scenario buttons ───────────────────────────────── */
@@ -533,7 +572,7 @@
             <div class="node-header">
               <div class="node-icon"></div>
               <div>
-                <div class="node-title">LLM Agent</div>
+                <div class="node-title">Local LLM Agent</div>
                 <div class="node-subtitle">Ministral 3B · pydantic-ai · tool calling</div>
               </div>
             </div>
@@ -671,6 +710,14 @@
 
   <!-- ── Sidebar ──────────────────────────────────────── -->
   <div class="sidebar">
+    <div class="toggle-row">
+      <div class="toggle-switch">
+        <input type="checkbox" id="offlineToggle">
+        <span class="toggle-slider"></span>
+      </div>
+      <label for="offlineToggle">Simulate offline (no cloud)</label>
+      <span class="offline-badge online" id="offlineBadge">online</span>
+    </div>
     <h2>Quick Scenarios</h2>
     <div class="scenario-bar">
       <button class="scenario-btn" onclick="runScenario('missing_scissors')">Missing Scissors</button>
@@ -787,6 +834,14 @@ function resetPipeline() {
     const node = el && el.closest('.node');
     if (node) node.classList.remove('node-expanded');
   });
+
+  // Apply offline state to remote VLM node
+  const remoteNode = document.getElementById('node-vlm_remote');
+  if (remoteNode && offlineToggle && offlineToggle.checked) {
+    remoteNode.classList.add('node-offline');
+    const rb = document.getElementById('body-vlm_remote');
+    if (rb) rb.innerHTML = 'Unavailable (offline)';
+  }
 
   // Reset validation checklist
   document.querySelectorAll('#val-checks li').forEach(li => li.classList.remove('pass', 'fail'));
@@ -935,7 +990,7 @@ const mcpCallCounts = { logistics: 0, emr: 0, vlm: 0 };
 const componentColors = {
   detector: '#f97316', reconcile: '#06b6d4', agent: '#6366f1',
   emr_api: '#22c55e', vlm_local: '#eab308', vlm_remote: '#a855f7',
-  validation: '#a855f7', tool_call: '#06b6d4', tasks: '#22c55e',
+  validation: '#a855f7', tool_call: '#06b6d4', pipeline: '#71717a', tasks: '#22c55e',
   prep_light: '#ef4444', spd: '#3b82f6', resources: '#3b82f6',
 };
 
@@ -1086,6 +1141,12 @@ function updateBody(comp, ev) {
     body.innerHTML = html || esc(detail) || 'Requested';
   } else if (comp === 'vlm_local') {
     let html = '';
+    if (ev.answer) {
+      const ans = ev.answer.trim();
+      const verdict = /^yes\b/i.test(ans) ? 'pass' : /^no\b/i.test(ans) ? 'fail' : 'inconclusive';
+      const verdictLabel = verdict === 'pass' ? 'Passed' : verdict === 'fail' ? 'Failed' : 'Inconclusive';
+      html += '<div class="vlm-verdict ' + verdict + '">' + verdictLabel + '</div>';
+    }
     if (ev.question) html += '<span style="color:var(--muted)">Q:</span> ' + esc(ev.question) + '<br>';
     if (ev.answer) html += '<span style="color:var(--yellow)">A:</span> ' + renderMd(ev.answer);
     body.innerHTML = html || renderMd(detail) || 'Active';
@@ -1179,7 +1240,7 @@ function formatComponent(c) {
   return {
     detector:'Detector', reconcile:'Reconcile', agent:'Agent',
     emr_api:'EMR API', vlm_local:'Local VLM', vlm_remote:'Remote VLM',
-    validation:'Validation', tool_call:'Tool Call',
+    validation:'Validation', tool_call:'Tool Call', pipeline:'Pipeline',
     tasks:'Tasks', prep_light:'Stack Light', spd:'SPD', resources:'Resources',
   }[c] || c;
 }
@@ -1200,6 +1261,26 @@ function renderMd(s) {
   return h;
 }
 
+// ── Offline toggle ───────────────────────────────────
+const offlineToggle = document.getElementById('offlineToggle');
+const offlineBadge = document.getElementById('offlineBadge');
+offlineToggle.addEventListener('change', () => {
+  const off = offlineToggle.checked;
+  offlineBadge.textContent = off ? 'offline' : 'online';
+  offlineBadge.className = 'offline-badge ' + (off ? 'offline' : 'online');
+  // Fade remote VLM node
+  const remoteNode = document.getElementById('node-vlm_remote');
+  if (remoteNode) {
+    remoteNode.classList.toggle('node-offline', off);
+    if (off) {
+      const body = document.getElementById('body-vlm_remote');
+      if (body) body.innerHTML = 'Unavailable (offline)';
+      const vt = document.getElementById('vlm-remote-thumb');
+      if (vt) vt.style.display = 'none';
+    }
+  }
+});
+
 // ── Quick Scenario Runner ───────────────────────────
 async function runScenario(name) {
   resetMcpState();
@@ -1207,7 +1288,8 @@ async function runScenario(name) {
   const btns = document.querySelectorAll('.scenario-btn');
   btns.forEach(b => b.classList.add('running'));
   try {
-    const r = await fetch('/run/' + encodeURIComponent(name), { method: 'POST' });
+    const offline = offlineToggle.checked ? '?offline=1' : '';
+    const r = await fetch('/run/' + encodeURIComponent(name) + offline, { method: 'POST' });
     const data = await r.json();
     if (data.error) alert('Error: ' + data.error);
   } catch (e) { alert('Failed: ' + e.message); }
