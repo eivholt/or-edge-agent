@@ -28,6 +28,13 @@ VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512-BF16"
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "local-dev-key")
 
 EMR_BASE_URL = "http://localhost:9000"
+
+VLM_SYSTEM_PROMPT = (
+    "You are a surgical-scene analyst. Answer the user's question about the "
+    "image. Respond ONLY with a JSON object — no markdown, no commentary:\n"
+    '{"answer": true/false, "description": "one or two sentences"}\n'
+    '"answer" is true when the answer to the question is YES, false when NO.'
+)
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 INSTRUCTIONS = """\
@@ -54,7 +61,7 @@ Rules:
 
 - VLM events (confidence_level="low" or these event_types) → VLM inspection required:
   - Check resources.cloud_connected to decide routing:
-    * If cloud_connected=true → call inspect_scene_remote (GPT-4o, higher quality).
+    * If cloud_connected=true → call inspect_scene_remote (Claude Opus 4-7, higher quality).
     * If cloud_connected=false → call inspect_scene_local (on-device Ministral 3B).
   - Event-type actions:
     - instrument_out_of_zone → human_review + yellow light
@@ -273,6 +280,7 @@ def set_or_prep_light(
     ctx: RunContext[AgentDeps],
     room_id: str,
     color: str,
+    reason: str,
 ) -> dict:
     """Set the OR prep status light.
 
@@ -283,21 +291,23 @@ def set_or_prep_light(
     Args:
         room_id: The OR room identifier.
         color: One of green, yellow, red.
+        reason: Short explanation of why this color was chosen.
     """
     result = {
         "room_id": room_id,
         "color": color,
+        "reason": reason,
         "status": "set",
     }
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
                       tool_name="set_or_prep_light",
-                      tool_args={"room_id": room_id, "color": color},
+                      tool_args={"room_id": room_id, "color": color, "reason": reason},
                       tool_result=result,
                       detail=f"set_or_prep_light(color={color})")
         ctx.deps.emit("prep_light",
                       color=color,
-                      reason="",
+                      reason=reason,
                       detail=f"Set to {color}")
     return result
 
@@ -347,9 +357,19 @@ def inspect_scene_local(
     encoded = base64.b64encode(resolved.read_bytes()).decode()
     data_url = f"data:image/{mime_subtype};base64,{encoded}"
 
+    guided_json = {
+        "type": "object",
+        "properties": {
+            "answer": {"type": "boolean"},
+            "description": {"type": "string"},
+        },
+        "required": ["answer", "description"],
+    }
+
     payload = {
         "model": VLM_MODEL,
         "messages": [
+            {"role": "system", "content": VLM_SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": [
@@ -360,6 +380,7 @@ def inspect_scene_local(
         ],
         "max_tokens": 512,
         "temperature": 0,
+        "guided_json": guided_json,
     }
 
     r = httpx.post(
@@ -372,8 +393,15 @@ def inspect_scene_local(
         timeout=60,
     )
     r.raise_for_status()
-    answer = r.json()["choices"][0]["message"]["content"]
-    result = {"image": str(resolved), "question": question, "answer": answer}
+    raw = r.json()["choices"][0]["message"]["content"]
+    try:
+        parsed = json.loads(raw)
+        answer = parsed.get("description", raw)
+        verdict = parsed.get("answer")
+    except (json.JSONDecodeError, AttributeError):
+        answer = raw
+        verdict = None
+    result = {"image": str(resolved), "question": question, "answer": answer, "verdict": verdict}
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
                       tool_name="inspect_scene_local",
@@ -393,7 +421,7 @@ def inspect_scene_remote(
     image_path: str,
     question: str,
 ) -> dict:
-    """Inspect an OR scene image using the REMOTE Azure VLM (gpt-4o).
+    """Inspect an OR scene image using the REMOTE Azure VLM (Claude Opus 4-7).
 
     This is a cloud fallback — only use when inspect_scene_local is
     unavailable or returns inconclusive results.  Higher quality but
@@ -426,7 +454,14 @@ def inspect_scene_remote(
         return {"error": f"image not found: {resolved}"}
 
     answer = ask_vlm(str(resolved), question)
-    result = {"image": str(resolved), "question": question, "answer": answer}
+    try:
+        parsed = json.loads(answer)
+        description = parsed.get("description", answer)
+        verdict = parsed.get("answer")
+    except (json.JSONDecodeError, AttributeError, TypeError):
+        description = answer
+        verdict = None
+    result = {"image": str(resolved), "question": question, "answer": description, "verdict": verdict}
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
                       tool_name="inspect_scene_remote",

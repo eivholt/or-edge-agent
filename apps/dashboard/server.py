@@ -259,7 +259,11 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     _emit("agent", status="thinking", detail="LLM processing…")
 
     from apps.agent.run_fixture import ask_agent
-    decision = ask_agent(event, resources, emit=_emit)
+    try:
+        decision = ask_agent(event, resources, emit=_emit)
+    except Exception as exc:
+        _emit("agent", status="error", detail=f"Agent error: {exc}")
+        decision = {"decision_summary": f"Agent error: {exc}", "tool_calls": [], "llm_iterations": 0}
 
     tool_calls = decision.get("tool_calls", [])
     llm_iters = decision.get("llm_iterations", 0)
