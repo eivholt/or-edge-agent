@@ -1,9 +1,9 @@
-"""Edge Impulse object detection inference via the Linux Python SDK.
+"""Edge Impulse FOMO object detection inference via the Linux Python SDK.
 
 Provides `detect(image_path)` which:
   1. Loads the .eim model (lazy singleton)
   2. Runs inference on the given image
-  3. Returns bounding boxes + saves an annotated image with overlays
+  3. Returns centroid detections + saves an annotated image with overlays
 
 Requires:
   - pip install edge_impulse_linux opencv-python-headless
@@ -97,35 +97,41 @@ def _get_runner():
 
 
 def _draw_overlay(img_rgb: np.ndarray, detections: list[Detection]) -> np.ndarray:
-    """Draw bounding boxes and labels on a copy of the image."""
+    """Draw centroid markers and labels on a copy of the image.
+
+    FOMO (constrained_object_detection) returns centroids, not true
+    bounding boxes — x/y are the center of the detected grid cell.
+    """
     out = img_rgb.copy()
     h, w = out.shape[:2]
-    # Scale line thickness and font based on image size
     thickness = max(1, min(h, w) // 300)
     font_scale = max(0.35, min(h, w) / 1200)
     pad = max(2, thickness * 2)
+    radius = max(4, min(h, w) // 60)
 
     for det in detections:
         color = LABEL_COLORS.get(det.label, DEFAULT_COLOR)
-        x1, y1 = det.x, det.y
-        x2, y2 = det.x + det.width, det.y + det.height
+        cx = det.x + det.width // 2
+        cy = det.y + det.height // 2
 
-        # Bounding box
-        cv2.rectangle(out, (x1, y1), (x2, y2), color, thickness)
+        # Centroid circle
+        cv2.circle(out, (cx, cy), radius, color, thickness)
+        cv2.circle(out, (cx, cy), 2, color, -1)  # filled dot at center
 
         # Label background + text
         text = f"{det.label} {det.confidence:.0%}"
         (tw, th), baseline = cv2.getTextSize(text, FONT, font_scale, thickness)
-        label_y = max(y1 - pad, th + pad)
+        label_y = max(cy - radius - pad, th + pad)
+        label_x = cx - tw // 2
         cv2.rectangle(
             out,
-            (x1, label_y - th - pad),
-            (x1 + tw + pad * 2, label_y + pad),
+            (label_x - pad, label_y - th - pad),
+            (label_x + tw + pad, label_y + pad),
             color,
             -1,
         )
         cv2.putText(
-            out, text, (x1 + pad, label_y), FONT, font_scale, (0, 0, 0), thickness
+            out, text, (label_x, label_y), FONT, font_scale, (0, 0, 0), thickness
         )
 
     return out
@@ -135,7 +141,7 @@ def _draw_overlay(img_rgb: np.ndarray, detections: list[Detection]) -> np.ndarra
 def detect(image_path: str | Path) -> DetectionResult:
     """Run object detection on an image file.
 
-    Returns DetectionResult with bounding boxes and path to annotated image.
+    Returns DetectionResult with centroid detections and path to annotated image.
     Falls back gracefully if the model isn't available.
     """
     image_path = Path(image_path)

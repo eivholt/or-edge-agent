@@ -65,7 +65,7 @@ async def serve_data(filepath: str):
         return {"error": "forbidden"}
     if not target.exists():
         return {"error": "not found"}
-    return FileResponse(target)
+    return FileResponse(target, headers={"Cache-Control": "no-store, no-cache, must-revalidate, max-age=0"})
 
 
 @app.get("/api/images")
@@ -101,6 +101,18 @@ async def list_cases():
         return cases
     except Exception:
         return []
+
+
+@app.get("/api/config")
+async def get_config():
+    """Return runtime model configuration."""
+    import os
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+    return {
+        "remote_vlm_model": os.getenv("AZURE_VLM_DEPLOYMENT", "claude-opus-4-7"),
+        "local_vlm_model": os.getenv("VLM_MODEL", "ministral-3b"),
+    }
 
 
 @app.get("/api/scenarios")
@@ -192,15 +204,21 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     event = json.loads(Path(scenario_path).read_text())
     scenario_name = Path(scenario_path).stem
 
-    # Find matching frame image
+    # Find matching frame image — prefer event's image_path if set
     image_url = None
     frame = None
-    for ext in (".png", ".jpg", ".jpeg"):
-        candidate = DATA_DIR / "frames" / f"frame_{scenario_name}{ext}"
+    if event.get("image_path"):
+        candidate = DATA_DIR / event["image_path"]
         if candidate.exists():
             frame = candidate
-            image_url = f"/data/frames/frame_{scenario_name}{ext}"
-            break
+            image_url = f"/data/{event['image_path']}"
+    if frame is None:
+        for ext in (".png", ".jpg", ".jpeg"):
+            candidate = DATA_DIR / "frames" / f"frame_{scenario_name}{ext}"
+            if candidate.exists():
+                frame = candidate
+                image_url = f"/data/frames/frame_{scenario_name}{ext}"
+                break
     if frame is None:
         # Fallback: use first available image
         for p in DATA_DIR.rglob("*.jpg"):
@@ -225,8 +243,9 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
         cache_bust = int(time.time() * 1000)
         image_url = f"{image_url}?t={cache_bust}"
 
-    # Use actual EI model detections as visible_items for reconciliation
-    if detected_labels:
+    # Use scenario-provided visible_items if set (simulates intended deficit),
+    # otherwise fall back to actual EI model detections for reconciliation.
+    if "visible_items" not in event and detected_labels:
         from collections import Counter
         detected_counts = dict(Counter(detected_labels))
         event["visible_items"] = detected_counts

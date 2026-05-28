@@ -16,7 +16,7 @@ from apps.vlm.ask_vlm import ask_vlm
 from apps.agent.run_fixture import ask_agent, get_resources
 from apps.agent.validation import validate_decision
 
-IMAGE_PATH = "data/frames/frame_missing_scissors.jpg"
+IMAGE_PATH = "data/frames/frame_missing_scissors.png"
 RESOURCES = get_resources("OR-2")
 
 

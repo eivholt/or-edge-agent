@@ -6,3 +6,4 @@ models/
 data/crops/
 data/detection/
 .env
+data/detections/

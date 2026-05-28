@@ -60,7 +60,7 @@
   /* ── Diagram grid ────────────────────────────────────── */
   .diagram {
     display: grid;
-    grid-template-columns: 264px minmax(0, 1fr) 44px 253px;
+    grid-template-columns: auto minmax(0, 1fr) 44px 253px;
     grid-template-rows: auto;
     gap: .5rem 0;
     max-width: 1200px;
@@ -121,7 +121,7 @@
     justify-content: space-between; padding-top: 1rem; padding-bottom: .5rem;
   }
   .connector-r {
-    align-self: stretch; justify-content: flex-start; padding-top: 0;
+    align-self: stretch; justify-content: flex-end; padding-top: 0; padding-bottom: 1rem;
   }
   .conn-group {
     display: flex; flex-direction: column; align-items: center; gap: .2rem;
@@ -132,7 +132,8 @@
     font-size: .7rem; color: var(--text); text-align: center;
     text-transform: uppercase; letter-spacing: .08em; line-height: 1.3;
     font-weight: 700; opacity: .85;
-    writing-mode: vertical-lr; text-orientation: mixed;
+    writing-mode: vertical-rl; text-orientation: mixed;
+    transform: rotate(180deg);
   }
 
   /* ── Edge Device Zone ───────────────────────────────── */
@@ -197,7 +198,7 @@
     min-height: 1.1em;
   }
   #body-agent { max-height: 120px; min-height: 2.4em; }
-  #body-tasks, #body-spd { max-height: 220px; }
+  #body-tasks, #body-spd { max-height: none; overflow: visible; }
   .node-body.expanded { max-height: none; overflow: auto; }
   .node-body code {
     background: rgba(255,255,255,.08); padding: .1em .3em; border-radius: 4px;
@@ -392,21 +393,25 @@
   .vlm-verdict.inconclusive { background: #f59e0b22; color: #f59e0b; }
 
   /* Task / SPD compact list entries */
-  .task-entry { display:flex; align-items:baseline; gap:.4rem; padding:.3rem .45rem; font-size:.72rem; line-height:1.35; margin-bottom:.3rem; border-radius:5px; flex-wrap:wrap; background:rgba(255,255,255,.03); border-left:3px solid var(--muted); }
+  .task-entry { display:flex; align-items:center; gap:.4rem; padding:.45rem .55rem; font-size:.72rem; line-height:1.35; margin-bottom:.35rem; border-radius:6px; flex-wrap:wrap; background:rgba(255,255,255,.03); border-left:3px solid var(--muted); }
   .task-entry:last-child { margin-bottom:0; }
-  .task-entry[data-type="missing_supply"] { border-left-color:var(--yellow); }
-  .task-entry[data-type="porter_hold"], .task-entry[data-type="porter_release"] { border-left-color:var(--purple); }
-  .task-entry[data-type="specimen_handoff"] { border-left-color:#06b6d4; }
-  .task-entry[data-type="human_review"] { border-left-color:var(--red); }
-  .task-entry[data-type="procedure_change_review"] { border-left-color:var(--red); }
-  .task-entry[data-type="nurse"] { border-left-color:var(--yellow); }
-  .task-entry[data-type="porter"] { border-left-color:var(--purple); }
-  .task-entry[data-type="robot"] { border-left-color:var(--blue); }
-  .task-badge { font-size:.56rem; font-weight:700; text-transform:uppercase; padding:1px 5px; border-radius:3px; color:#000; white-space:nowrap; flex-shrink:0; }
-  .task-type { font-size:.62rem; font-weight:600; color:var(--text); }
-  .task-summary { opacity:.75; font-size:.66rem; width:100%; }
-  .task-method { font-size:.56rem; font-weight:600; padding:1px 4px; border-radius:3px; white-space:nowrap; flex-shrink:0; }
-  .task-method.nurse { background:rgba(234,179,8,.15); color:var(--yellow); border:1px solid rgba(234,179,8,.25); }
+  .task-entry[data-type="missing_supply"] { border-left-color:var(--yellow); background:rgba(234,179,8,.04); }
+  .task-entry[data-type="porter_hold"], .task-entry[data-type="porter_release"] { border-left-color:var(--purple); background:rgba(168,85,247,.04); }
+  .task-entry[data-type="specimen_handoff"] { border-left-color:#06b6d4; background:rgba(6,182,212,.04); }
+  .task-entry[data-type="human_review"] { border-left-color:var(--red); background:rgba(239,68,68,.04); }
+  .task-entry[data-type="procedure_change_review"] { border-left-color:var(--orange); background:rgba(249,115,22,.04); }
+  .task-entry[data-type="nurse"] { border-left-color:var(--yellow); background:rgba(234,179,8,.04); }
+  .task-entry[data-type="porter"] { border-left-color:var(--purple); background:rgba(168,85,247,.04); }
+  .task-entry[data-type="robot"] { border-left-color:var(--blue); background:rgba(59,130,246,.04); }
+  .task-icon { font-size:.8rem; flex-shrink:0; line-height:1; }
+  .task-badge { font-size:.5rem; font-weight:700; text-transform:uppercase; padding:1px 5px; border-radius:3px; white-space:nowrap; flex-shrink:0; letter-spacing:.04em; }
+  .task-badge.high { background:rgba(239,68,68,.2); color:var(--red); border:1px solid rgba(239,68,68,.3); }
+  .task-badge.normal { background:rgba(234,179,8,.2); color:var(--yellow); border:1px solid rgba(234,179,8,.3); }
+  .task-badge.low { background:rgba(148,163,184,.15); color:var(--muted); border:1px solid rgba(148,163,184,.2); }
+  .task-type { font-size:.66rem; font-weight:600; color:var(--text); }
+  .task-summary { opacity:.65; font-size:.62rem; width:100%; padding-left:1.3rem; }
+  .task-method { font-size:.56rem; font-weight:600; padding:1px 5px; border-radius:3px; white-space:nowrap; flex-shrink:0; }
+  .task-method.nurse { background:rgba(6,182,212,.15); color:var(--cyan); border:1px solid rgba(6,182,212,.25); }
   .task-method.robot { background:rgba(59,130,246,.15); color:var(--blue); border:1px solid rgba(59,130,246,.25); }
   .task-method.porter { background:rgba(168,85,247,.15); color:var(--purple); border:1px solid rgba(168,85,247,.25); }
   .event-log { display: flex; flex-direction: column; gap: .5rem; }
@@ -673,7 +678,7 @@
               <div class="node-icon"></div>
               <div>
                 <div class="node-title">Remote VLM <span class="badge-external badge-cloud">Cloud</span></div>
-                <div class="node-subtitle">GPT-4o · Azure · Fallback</div>
+                <div class="node-subtitle" id="vlm-remote-subtitle">Cloud · Fallback</div>
               </div>
             </div>
             <img id="vlm-remote-thumb" class="vlm-thumb" src="" alt="VLM input">
@@ -743,6 +748,12 @@ const connLabel = document.getElementById('connLabel');
 const detectorImage = document.getElementById('detectorImage');
 const detectorPlaceholder = document.getElementById('detectorPlaceholder');
 const detectorImageWrap = document.getElementById('detectorImageWrap');
+
+// ── Load runtime config ─────────────────────────────
+fetch('/api/config').then(r => r.json()).then(cfg => {
+  const sub = document.getElementById('vlm-remote-subtitle');
+  if (sub && cfg.remote_vlm_model) sub.textContent = cfg.remote_vlm_model + ' · Cloud · Fallback';
+}).catch(() => {});
 
 // ── SSE Connection ──────────────────────────────────
 function connect() {
@@ -1081,10 +1092,12 @@ function updateBody(comp, ev) {
     if (body.dataset.count === undefined || body.dataset.count === '0') body.innerHTML = '';
     const n = parseInt(body.dataset.count || '0') + 1;
     body.dataset.count = n;
-    const priorityColor = {high:'var(--red)',normal:'var(--yellow)',low:'var(--muted)'};
-    const pCol = priorityColor[ev.priority] || 'var(--muted)';
+    const taskIcons = {missing_supply:'📦', procedure_change_review:'🔄', human_review:'👁️', porter_hold:'🚏', porter_release:'🚏', specimen_handoff:'🧫'};
+    const icon = taskIcons[ev.task_type] || '📋';
+    const pClass = ev.priority || 'normal';
     let entry = '<div class="task-entry" data-type="' + esc(ev.task_type || '') + '">';
-    entry += '<span class="task-badge" style="background:' + pCol + '">' + esc(ev.priority || '?') + '</span> ';
+    entry += '<span class="task-icon">' + icon + '</span>';
+    entry += '<span class="task-badge ' + pClass + '">' + esc(ev.priority || '?') + '</span> ';
     entry += '<span class="task-type">' + esc(ev.task_type || '').replace(/_/g, ' ') + '</span>';
     if (ev.summary) entry += '<span class="task-summary">' + esc(ev.summary) + '</span>';
     entry += '</div>';
@@ -1110,14 +1123,16 @@ function updateBody(comp, ev) {
     if (body.dataset.count === undefined || body.dataset.count === '0') body.innerHTML = '';
     const n = parseInt(body.dataset.count || '0') + 1;
     body.dataset.count = n;
-    const urgColor = {high:'var(--red)',normal:'var(--yellow)',low:'var(--muted)'};
-    const uCol = urgColor[ev.urgency] || 'var(--muted)';
     const method = ev.delivery_method || 'nurse';
-    const methodLabels = {nurse: '👩‍⚕️ Nurse Runner', robot: '🤖 Robot', porter: '🚶 Porter'};
+    const methodIcons = {nurse: '👩‍⚕️', robot: '🤖', porter: '🚶'};
+    const methodLabels = {nurse: 'Nurse Runner', robot: 'Robot', porter: 'Porter'};
+    const mIcon = methodIcons[method] || '👩‍⚕️';
     const methodLabel = methodLabels[method] || methodLabels.nurse;
     const methodClass = method;
+    const uClass = ev.urgency || 'normal';
     let entry = '<div class="task-entry" data-type="' + esc(methodClass) + '">';
-    entry += '<span class="task-badge" style="background:' + uCol + '">' + esc(ev.urgency || '?') + '</span> ';
+    entry += '<span class="task-icon">' + mIcon + '</span>';
+    entry += '<span class="task-badge ' + uClass + '">' + esc(ev.urgency || '?') + '</span> ';
     entry += '<span class="task-type">' + esc(ev.item_name || '').replace(/_/g, ' ') + '</span> ';
     entry += '<span class="task-method ' + methodClass + '">' + methodLabel + '</span>';
     entry += '</div>';
@@ -1126,11 +1141,12 @@ function updateBody(comp, ev) {
     return; // skip default body replacement
   } else if (comp === 'vlm_local') {
     let html = '';
-    if (ev.answer) {
-      const ans = ev.answer.trim();
-      const verdict = /^yes\b/i.test(ans) ? 'pass' : /^no\b/i.test(ans) ? 'fail' : 'inconclusive';
-      const verdictLabel = verdict === 'pass' ? 'Passed' : verdict === 'fail' ? 'Failed' : 'Inconclusive';
-      html += '<div class="vlm-verdict ' + verdict + '">' + verdictLabel + '</div>';
+    if (ev.verdict === true) {
+      html += '<div class="vlm-verdict pass">Yes</div>';
+    } else if (ev.verdict === false) {
+      html += '<div class="vlm-verdict fail">No</div>';
+    } else if (ev.answer) {
+      html += '<div class="vlm-verdict inconclusive">Inconclusive</div>';
     }
     if (ev.question) html += '<span style="color:var(--muted)">Q:</span> ' + esc(ev.question) + '<br>';
     if (ev.answer) html += '<span style="color:var(--yellow)">A:</span> ' + renderMd(ev.answer);
@@ -1138,6 +1154,13 @@ function updateBody(comp, ev) {
     maybeAddToggle(body);
   } else if (comp === 'vlm_remote') {
     let html = '';
+    if (ev.verdict === true) {
+      html += '<div class="vlm-verdict pass">Yes</div>';
+    } else if (ev.verdict === false) {
+      html += '<div class="vlm-verdict fail">No</div>';
+    } else if (ev.answer) {
+      html += '<div class="vlm-verdict inconclusive">Inconclusive</div>';
+    }
     if (ev.question) html += '<span style="color:var(--muted)">Q:</span> ' + esc(ev.question) + '<br>';
     if (ev.answer) html += '<span style="color:var(--purple)">A:</span> ' + renderMd(ev.answer);
     body.innerHTML = html || renderMd(detail) || 'Active';

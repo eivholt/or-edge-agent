@@ -1,3 +1,56 @@
+# OR Edge Agent
+
+Operating-room edge intelligence agent: real-time instrument detection, reconciliation against the surgical pathway, and autonomous logistics actions (SPD resupply, prep-light control, task creation).
+
+## Quick Start
+
+```bash
+source .venv/bin/activate
+./start.sh            # starts EMR (:9000), Dashboard (:8000), vLLM (:8081)
+./start.sh stop       # stops all services
+./start.sh status     # show running services
+```
+
+## Edge Impulse Model Management
+
+The object-detection model lives at `models/modelfile.eim` (Edge Impulse Linux Runner format).
+
+**Important:** The `.eim` must be built as **float32** for accurate detection. An int8-quantized build will misclassify instruments (e.g. scalpels detected as tweezers) due to quantization loss in the FOMO architecture.
+
+### Download float32 model via API
+
+```bash
+export EI_API_KEY="ei_..."   # from EI Studio > project 371734 > Dashboard > Keys
+python scripts/download_float32_model.py
+```
+
+This script will:
+1. Trigger a **float32** `runner-linux-x86_64` build via the EI Studio API
+2. Poll until the build job completes (~1–3 min)
+3. Back up the current model as `models/modelfile.eim.int8.bak`
+4. Save the new float32 model to `models/modelfile.eim`
+
+**Project:** 371734 — "Surgery Inventory Synthetic NVIDIA"
+**Labels:** scalpel, scissors, sponge, tweezers
+**Input:** 320×320 RGB, FOMO (constrained object detection)
+**Confidence threshold:** 0.9 (set in `apps/detector/inference.py`)
+
+### Verify detection accuracy
+
+```bash
+python -c "
+from apps.detector.inference import detect_instruments
+result = detect_instruments('data/frames/frame_missing_scissors3.png')
+print(result)
+"
+```
+
+Expected float32 output should match EI Studio results (scalpel:2, scissors:2, sponge:4, tweezers:2 at ≥0.99 confidence).
+
+---
+
+## Dev Notes
+
 ssh eivho@192.168.1.107 -p 2222
 
 uvicorn synthetic_emr.api:app --reload --port 9000

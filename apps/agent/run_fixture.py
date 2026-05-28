@@ -364,6 +364,7 @@ def inspect_scene_local(
             "description": {"type": "string"},
         },
         "required": ["answer", "description"],
+        "additionalProperties": False,
     }
 
     payload = {
@@ -380,7 +381,14 @@ def inspect_scene_local(
         ],
         "max_tokens": 512,
         "temperature": 0,
-        "guided_json": guided_json,
+        "response_format": {
+            "type": "json_schema",
+            "json_schema": {
+                "name": "vlm_response",
+                "schema": guided_json,
+                "strict": True,
+            },
+        },
     }
 
     r = httpx.post(
@@ -411,6 +419,7 @@ def inspect_scene_local(
         ctx.deps.emit("vlm_local",
                       question=question,
                       answer=answer,
+                      verdict=verdict,
                       detail=f"Local VLM: {question[:80]}")
     return result
 
@@ -468,10 +477,12 @@ def inspect_scene_remote(
                       tool_args={"image_path": image_path, "question": question},
                       tool_result=result,
                       detail=f"inspect_scene_remote: {question[:80]}")
+        from apps.vlm.ask_vlm import AZURE_VLM_DEPLOYMENT
         ctx.deps.emit("vlm_remote",
                       question=question,
                       answer=answer,
-                      detail=f"Remote VLM (GPT-4o): {question[:80]}")
+                      verdict=verdict,
+                      detail=f"Remote VLM ({AZURE_VLM_DEPLOYMENT}): {question[:80]}")
     return result
 
 

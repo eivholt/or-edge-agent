@@ -19,12 +19,28 @@ CASES = {
             "scalpel": 1,
             "scissors": 3,
             "sponge": 2,
-            "tweezers": 4,
-            "suction_tip": 1
+            "tweezers": 4
         },
         "open_items": [
             "porter_not_released",
             "pathology_handoff_task_not_created"
+        ],
+        "porter_release_allowed": False
+    },
+    "CASE-1043": {
+        "case_id": "CASE-1043",
+        "patient_id": "SYN-PAT-8843",
+        "procedure": "synthetic laparoscopic cholecystectomy",
+        "phase": "pre_op_setup",
+        "priority": "normal",
+        "required_items": {
+            "scalpel": 2,
+            "scissors": 3,
+            "sponge": 4,
+            "tweezers": 2
+        },
+        "open_items": [
+            "porter_not_released"
         ],
         "porter_release_allowed": False
     },

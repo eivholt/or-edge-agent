@@ -193,7 +193,14 @@ def ask_local(image_path: Path, question: str) -> tuple[str, float]:
             ],
             max_tokens=300,
             temperature=0,
-            extra_body={"guided_json": {"type": "object", "properties": {"answer": {"type": "boolean"}, "description": {"type": "string"}}, "required": ["answer", "description"]}},
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "vlm_response",
+                    "schema": {"type": "object", "properties": {"answer": {"type": "boolean"}, "description": {"type": "string"}}, "required": ["answer", "description"], "additionalProperties": False},
+                    "strict": True,
+                },
+            },
         )
         answer = r.choices[0].message.content.strip()
     except Exception as e:
