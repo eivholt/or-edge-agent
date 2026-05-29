@@ -188,6 +188,7 @@ case "${1:-all}" in
         start_emr
         ;;
     dash|dashboard)
+        kill_port "$DASH_PORT"
         start_dashboard
         ;;
     agent)

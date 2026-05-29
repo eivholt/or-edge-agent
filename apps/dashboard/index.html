@@ -62,8 +62,8 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) 44px 253px;
     grid-template-rows: auto;
-    gap: .5rem 0;
-    max-width: 1200px;
+    gap: .5rem .75rem;
+    max-width: 1800px;
     margin: 0 auto;
     align-items: start;
   }
@@ -119,6 +119,7 @@
   }
   .connector-l {
     justify-content: space-between; padding-top: 1rem; padding-bottom: .5rem;
+    padding-left: .5rem; padding-right: .5rem;
   }
   .connector-r {
     align-self: stretch; justify-content: flex-end; padding-top: 0; padding-bottom: 1rem;
@@ -126,7 +127,7 @@
   .conn-group {
     display: flex; flex-direction: column; align-items: center; gap: .2rem;
   }
-  .conn-arrow { font-size: 1.6rem; color: var(--border); transition: color .3s; line-height: 1; font-weight: 900; }
+  .conn-arrow { font-size: 3.0rem; color: var(--border); transition: color .3s; line-height: 1; font-weight: 900; }
   .conn-arrow.active { color: var(--accent); }
   .conn-label {
     font-size: .7rem; color: var(--text); text-align: center;
@@ -154,6 +155,8 @@
   .edge-header .zone-label { color: var(--accent); margin-bottom: 0; }
   .edge-subtitle { font-size: .6rem; color: var(--muted); margin-top: .1rem; }
   .edge-pipeline { display: flex; flex-direction: column; gap: .35rem; }
+  .edge-main-row { display: flex; gap: .5rem; align-items: stretch; }
+  .edge-right-col { flex: 2; min-width: 0; display: flex; flex-direction: column; gap: .35rem; }
 
   /* ── Visual Events group ──────────────────────────── */
   .visual-events {
@@ -161,12 +164,15 @@
     border-radius: 10px;
     padding: .4rem .55rem .55rem;
     display: flex; flex-direction: column; gap: .3rem;
+    flex: 1; min-width: 0;
   }
   .ve-label {
     font-size: .55rem; font-weight: 700; text-transform: uppercase;
     letter-spacing: .08em; color: var(--orange); margin-bottom: .1rem;
   }
   .visual-events .flow-arrow { font-size: .7rem; padding: 0; }
+  .flow-arrow-h { display: flex; align-items: flex-start; padding-top: 1rem; color: var(--border); font-size: 3.0rem; font-weight: 900; padding-left: .3rem; padding-right: .3rem; transition: color .3s; }
+  .flow-arrow-h.active { color: var(--accent); }
 
   .edge-bottom-row { display: flex; gap: .4rem; }
   .edge-bottom-row .node { flex: 1; min-width: 0; }
@@ -197,8 +203,10 @@
     max-height: 80px; overflow: hidden; position: relative;
     min-height: 1.1em;
   }
-  #body-agent { max-height: 120px; min-height: 2.4em; }
+  #body-agent { max-height: none; overflow: visible; min-height: 2.4em; }
+  #node-agent { flex: 2; }
   #body-tasks, #body-spd { max-height: none; overflow: visible; }
+  #body-vlm_local, #body-vlm_remote { max-height: none; overflow: visible; }
   .node-body.expanded { max-height: none; overflow: auto; }
   .node-body code {
     background: rgba(255,255,255,.08); padding: .1em .3em; border-radius: 4px;
@@ -296,7 +304,7 @@
   /* ── Flow arrows ────────────────────────────────────── */
   .flow-arrow {
     display: flex; justify-content: center; color: var(--border);
-    font-size: 1.1rem; transition: color .3s; padding: 0; font-weight: 900;
+    font-size: 3.0rem; transition: color .3s; padding: 0; font-weight: 900;
   }
   .flow-arrow.active { color: var(--accent); }
 
@@ -341,11 +349,11 @@
 
   /* ── Detection overlay ──────────────────────────────── */
   .detection-overlay {
-    display: none; width: 50%; border-radius: 6px;
+    display: none; width: 100%; aspect-ratio: 1; object-fit: contain; border-radius: 6px;
     margin-top: .4rem; border: 1px solid var(--border);
   }
   .detection-overlay-placeholder {
-    width: 50%; aspect-ratio: 1; border-radius: 6px;
+    width: 100%; aspect-ratio: 1; border-radius: 6px;
     margin-top: .4rem; border: 1px dashed var(--border);
     background: var(--surface); display: flex; align-items: center; justify-content: center;
     color: var(--muted); font-size: .55rem; opacity: .4;
@@ -538,7 +546,8 @@
         </div>
 
         <div class="edge-pipeline">
-          <!-- Visual Events (grouped parent) -->
+          <div class="edge-main-row">
+          <!-- Visual Events (left column) -->
           <div class="visual-events">
             <div class="ve-label">Visual Events</div>
             <!-- Object Detector -->
@@ -555,9 +564,12 @@
               <div class="node-body" id="body-detector">Waiting for events…</div>
             </div>
 
-            <div class="flow-arrow" id="arrow-1">↓</div>
-
           </div>
+
+          <div class="flow-arrow-h" id="arrow-1">→</div>
+
+          <!-- Right column: Agent + bottom row -->
+          <div class="edge-right-col">
 
           <!-- LLM Agent (expanded with MCP servers + tools) -->
           <div class="node" data-component="agent" id="node-agent">
@@ -647,6 +659,8 @@
               </ul>
             </div>
           </div>
+          </div><!-- /edge-right-col -->
+          </div><!-- /edge-main-row -->
         </div>
       </div>
 
@@ -730,10 +744,10 @@
       <button class="scenario-btn" onclick="runScenario('procedure_changed')">Procedure Changed</button>
       <button class="scenario-btn" onclick="runScenario('specimen_handoff')">Specimen Handoff</button>
       <button class="scenario-btn" onclick="runScenario('sterile_zone_ambiguity')">Sterile Zone Ambiguity</button>
-      <button class="scenario-btn" onclick="runScenario('instrument_out_of_zone')">🔍 Instrument Out of Zone</button>
-      <button class="scenario-btn" onclick="runScenario('specimen_ready_check')">🔍 Specimen Ready</button>
-      <button class="scenario-btn" onclick="runScenario('room_turnover_check')">🔍 Room Turnover</button>
-      <button class="scenario-btn" onclick="runScenario('ppe_compliance_check')">🔍 PPE Compliance</button>
+      <button class="scenario-btn" onclick="runScenario('instrument_out_of_zone')">Instrument Out of Zone</button>
+      <button class="scenario-btn" onclick="runScenario('specimen_ready_check')">Specimen Ready</button>
+      <button class="scenario-btn" onclick="runScenario('room_turnover_check')">Room Turnover</button>
+      <button class="scenario-btn" onclick="runScenario('ppe_compliance_check')">PPE Compliance</button>
     </div>
     <h2>Event Log</h2>
     <div class="event-log" id="eventLog"></div>
@@ -772,7 +786,7 @@ function deactivateAll() {
   document.querySelectorAll('.node.active, .node.thinking').forEach(n => {
     n.classList.remove('active', 'thinking');
   });
-  document.querySelectorAll('.flow-arrow.active').forEach(a => a.classList.remove('active'));
+  document.querySelectorAll('.flow-arrow.active, .flow-arrow-h.active').forEach(a => a.classList.remove('active'));
   document.querySelectorAll('.conn-arrow.active').forEach(a => a.classList.remove('active'));
   document.querySelectorAll('.mcp-pill.active').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.mcp-dot.active').forEach(d => d.classList.remove('active'));
@@ -955,6 +969,17 @@ const toolToMcp = {
   inspect_scene_remote: 'vlm',
 };
 
+// Map tool names to dashboard node components for early activation
+const toolToNode = {
+  inspect_scene_remote: 'vlm_remote',
+  inspect_scene_local: 'vlm_local',
+  get_surgical_pathway: 'emr_api',
+  get_case_setup_requirements: 'emr_api',
+  create_synthetic_or_task: 'tasks',
+  request_spd_resupply: 'spd',
+  reconcile_instruments: 'reconcile',
+};
+
 const mcpPillIds = { logistics: 'mcp-or-logistics', emr: 'mcp-synthetic-emr', vlm: 'mcp-vlm-tools' };
 const mcpCallCounts = { logistics: 0, emr: 0, vlm: 0 };
 
@@ -982,6 +1007,18 @@ function resetMcpState() {
 function activateTool(ev) {
   const name = ev.tool_name;
   if (!name) return;
+
+  // Activate corresponding dashboard node early (before result arrives)
+  const nodeComp = toolToNode[name];
+  if (nodeComp) {
+    activateNode(nodeComp);
+    activateArrows(nodeComp);
+    activateConnectors(nodeComp);
+    const body = document.getElementById('body-' + nodeComp);
+    if (body && body.textContent.trim() === 'Idle') {
+      body.innerHTML = '<span style="opacity:.6">Working…</span>';
+    }
+  }
 
   const mcpKey = toolToMcp[name];
   if (mcpKey) {
@@ -1151,7 +1188,6 @@ function updateBody(comp, ev) {
     if (ev.question) html += '<span style="color:var(--muted)">Q:</span> ' + esc(ev.question) + '<br>';
     if (ev.answer) html += '<span style="color:var(--yellow)">A:</span> ' + renderMd(ev.answer);
     body.innerHTML = html || renderMd(detail) || 'Active';
-    maybeAddToggle(body);
   } else if (comp === 'vlm_remote') {
     let html = '';
     if (ev.verdict === true) {
@@ -1165,7 +1201,6 @@ function updateBody(comp, ev) {
     if (ev.answer) html += '<span style="color:var(--purple)">A:</span> ' + renderMd(ev.answer);
     body.innerHTML = html || renderMd(detail) || 'Active';
     if (ev.image_url) { const vt = document.getElementById('vlm-remote-thumb'); if (vt) { vt.src = ev.image_url; vt.style.display = 'block'; } }
-    maybeAddToggle(body);
   } else if (comp === 'tool_call') {
     // Handled by activateTool — no body node for this
     return;
@@ -1222,13 +1257,37 @@ function setLight(color, reason) {
 }
 
 function addLog(ev) {
-  const entry = document.createElement('div');
-  entry.className = 'log-entry';
-  entry.dataset.component = ev.component;
   const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
   const detail = ev.detail || ev.summary || JSON.stringify(ev).slice(0, 200);
   const color = componentColors[ev.component] || '#71717a';
   const compName = formatComponent(ev.component);
+
+  // Consolidate agent thinking events into one updatable log entry
+  if (ev.component === 'agent' && ev.status === 'thinking') {
+    let existing = log.querySelector('.log-entry[data-component="agent"][data-thinking]');
+    if (!existing) {
+      existing = document.createElement('div');
+      existing.className = 'log-entry';
+      existing.dataset.component = 'agent';
+      existing.dataset.thinking = '1';
+      log.prepend(existing);
+    }
+    existing.innerHTML =
+      '<div class="log-time">' + time + '</div>' +
+      '<div class="log-comp"><span class="log-icon" style="background:' + color + '"></span><span style="color:' + color + '">' + compName + '</span></div>' +
+      '<div class="log-detail">' + renderMd(truncate(detail, 180)) + '</div>';
+    return;
+  }
+
+  // When agent is done, remove the thinking entry marker so next run gets a fresh one
+  if (ev.component === 'agent' && ev.status === 'done') {
+    const thinking = log.querySelector('.log-entry[data-component="agent"][data-thinking]');
+    if (thinking) delete thinking.dataset.thinking;
+  }
+
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.dataset.component = ev.component;
 
   // Tool call entries show tool name in detail
   let detailHtml = renderMd(truncate(detail, 180));
@@ -1258,13 +1317,16 @@ function esc(s) { return s ? String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;'
 function renderMd(s) {
   if (!s) return '';
   let h = esc(s);
-  // headings (###, ##, #) — must run before \n→<br>
+  // headings (####, ###, ##, #) — must run before \n→<br>, longest first
+  h = h.replace(/(^|\n)#{4}\s+(.+?)(?=\n|$)/g, '$1<strong style="font-size:.8rem">$2</strong>');
   h = h.replace(/(^|\n)#{3}\s+(.+?)(?=\n|$)/g, '$1<strong style="font-size:.85rem">$2</strong>');
   h = h.replace(/(^|\n)#{2}\s+(.+?)(?=\n|$)/g, '$1<strong style="font-size:.9rem">$2</strong>');
   h = h.replace(/(^|\n)#\s+(.+?)(?=\n|$)/g, '$1<strong style="font-size:.95rem">$2</strong>');
   h = h.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
   h = h.replace(/\*(.+?)\*/g, '<em>$1</em>');
   h = h.replace(/`([^`]+)`/g, '<code>$1</code>');
+  // unordered list items (- item or * item)
+  h = h.replace(/(^|\n)[*\-]\s+/g, '$1• ');
   h = h.replace(/\n/g, '<br>');
   return h;
 }

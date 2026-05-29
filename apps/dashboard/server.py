@@ -275,7 +275,7 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     }
 
     # 3. Agent decision — agent calls EMR + reconcile as tools
-    _emit("agent", status="thinking", detail="LLM processing…")
+    _emit("agent", status="thinking", detail="Reasoning…")
 
     from apps.agent.run_fixture import ask_agent
     try:

@@ -92,6 +92,22 @@ class AgentDeps:
     case: dict = None  # populated by get_surgical_pathway tool
     reconciliation: dict = None  # populated by reconcile_instruments tool
     emit: object = None  # optional SSE callback: emit(component, **kwargs)
+    _tool_count: int = 0  # tracks tool calls for iteration progress
+    _tools_used: list = None  # names of tools called so far
+
+    def __post_init__(self):
+        if self._tools_used is None:
+            self._tools_used = []
+
+    def emit_tool_progress(self, tool_name: str):
+        """Emit an agent status update showing tool progress."""
+        self._tool_count += 1
+        self._tools_used.append(tool_name.replace("_", " "))
+        if self.emit:
+            progress = " → ".join(self._tools_used)
+            self.emit("agent", status="thinking",
+                      summary=progress,
+                      detail=progress)
 
 
 # ── Agent ────────────────────────────────────────────────────────────
@@ -132,6 +148,7 @@ def get_surgical_pathway(
     case = r.json()
     # Store on deps so reconcile_instruments can use it
     ctx.deps.case = case
+    ctx.deps.emit_tool_progress("get_surgical_pathway")
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
                       tool_name="get_surgical_pathway",
@@ -163,6 +180,7 @@ def reconcile_instruments(
     recon = reconcile_setup(event, case)
     # Store on deps for prompt context
     ctx.deps.reconciliation = recon
+    ctx.deps.emit_tool_progress("reconcile_instruments")
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
                       tool_name="reconcile_instruments",
@@ -216,6 +234,7 @@ def create_synthetic_or_task(
         "summary": summary,
         "reason": reason,
     }
+    ctx.deps.emit_tool_progress("create_synthetic_or_task")
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
                       tool_name="create_synthetic_or_task",
@@ -261,6 +280,7 @@ def request_spd_resupply(
         "urgency": urgency,
         "status": "requested",
     }
+    ctx.deps.emit_tool_progress("request_spd_resupply")
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
                       tool_name="request_spd_resupply",
@@ -299,6 +319,7 @@ def set_or_prep_light(
         "reason": reason,
         "status": "set",
     }
+    ctx.deps.emit_tool_progress("set_or_prep_light")
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
                       tool_name="set_or_prep_light",
@@ -347,6 +368,10 @@ def inspect_scene_local(
 
     if not resolved.is_file():
         return {"error": f"image not found: {resolved}"}
+
+    ctx.deps.emit_tool_progress("inspect_scene_local")
+    if ctx.deps.emit:
+        ctx.deps.emit("vlm_local", question=question, detail="Local VLM: working\u2026")
 
     suffix = resolved.suffix.lower().lstrip(".")
     mime_map = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}
@@ -462,6 +487,10 @@ def inspect_scene_remote(
     if not resolved.is_file():
         return {"error": f"image not found: {resolved}"}
 
+    ctx.deps.emit_tool_progress("inspect_scene_remote")
+    if ctx.deps.emit:
+        ctx.deps.emit("vlm_remote", question=question, detail="Remote VLM: working\u2026")
+
     answer = ask_vlm(str(resolved), question)
     try:
         parsed = json.loads(answer)
@@ -480,7 +509,7 @@ def inspect_scene_remote(
         from apps.vlm.ask_vlm import AZURE_VLM_DEPLOYMENT
         ctx.deps.emit("vlm_remote",
                       question=question,
-                      answer=answer,
+                      answer=description,
                       verdict=verdict,
                       detail=f"Remote VLM ({AZURE_VLM_DEPLOYMENT}): {question[:80]}")
     return result
