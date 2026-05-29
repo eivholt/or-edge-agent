@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OR Edge Agent — Dashboard</title>
+<title>Operation Room Edge Agent — Dashboard</title>
 <style>
   :root {
     --bg: #0f1117;
@@ -122,7 +122,7 @@
     padding-left: .5rem; padding-right: .5rem;
   }
   .connector-r {
-    align-self: stretch; justify-content: flex-end; padding-top: 0; padding-bottom: 1rem;
+    align-self: stretch; justify-content: center; padding-top: 0; padding-bottom: 0;
   }
   .conn-group {
     display: flex; flex-direction: column; align-items: center; gap: .2rem;
@@ -203,8 +203,22 @@
     max-height: 80px; overflow: hidden; position: relative;
     min-height: 1.1em;
   }
-  #body-agent { max-height: none; overflow: visible; min-height: 2.4em; }
-  #node-agent { flex: 2; }
+  #body-agent { max-height: none; overflow: visible; min-height: 2.4em; flex: 1; }
+  #node-agent { flex: 2; display: flex; flex-direction: column; }
+  .agent-ticker {
+    font-family: 'JetBrains Mono','Fira Code',monospace;
+    font-size: .64rem; line-height: 1.4; color: #d4d4d8;
+    background: rgba(255,255,255,.08); border-radius: 4px;
+    padding: .3rem .5rem; margin: .35rem 0;
+    overflow: hidden; white-space: nowrap;
+    text-align: left;
+  }
+  .agent-ticker:empty { display: none; }
+  .agent-ticker:not(.has-content) { display: none; }
+  .tick-dot { color: #71717a; margin: 0 .35em; }
+  .tick-step { color: var(--cyan); }
+  .tick-result { color: var(--green, #4ade80); }
+  .tick-error { color: var(--red, #f87171); }
   #body-tasks, #body-spd { max-height: none; overflow: visible; }
   #body-vlm_local, #body-vlm_remote { max-height: none; overflow: visible; }
   .node-body.expanded { max-height: none; overflow: auto; }
@@ -241,6 +255,18 @@
   .node[data-component="validation"] .node-icon { background: rgba(168,85,247,.15); color: #a855f7; }
   .node[data-component="tasks"]      .node-icon { background: rgba(34,197,94,.15); color: var(--green); }
   .node[data-component="resources"]  .node-icon { background: rgba(59,130,246,.15); color: var(--blue); }
+
+  .node[data-component="detector"]   .node-title { color: var(--orange); }
+  .node[data-component="reconcile"]  .node-title { color: var(--cyan); }
+  .node[data-component="agent"]      .node-title { color: var(--accent); }
+  .node[data-component="emr_api"]    .node-title { color: var(--green); }
+  .node[data-component="vlm_local"]  .node-title { color: var(--yellow); }
+  .node[data-component="vlm_remote"] .node-title { color: var(--purple); }
+  .node[data-component="prep_light"] .node-title { color: var(--red); }
+  .node[data-component="spd"]        .node-title { color: var(--blue); }
+  .node[data-component="validation"] .node-title { color: #a855f7; }
+  .node[data-component="tasks"]      .node-title { color: var(--green); }
+  .node[data-component="resources"]  .node-title { color: var(--blue); }
 
   /* ── Compact MCP pills inside agent ──────────────── */
   .mcp-compact {
@@ -324,9 +350,7 @@
     letter-spacing: .06em; padding: .15rem .4rem; border-radius: 4px;
     margin-left: .4rem; font-weight: 600;
   }
-  .badge-physical { background: rgba(34,197,94,.1); color: var(--green); border: 1px solid rgba(34,197,94,.2); }
-  .badge-cloud { background: rgba(168,85,247,.1); color: var(--purple); border: 1px solid rgba(168,85,247,.2); }
-  .badge-edge { background: rgba(234,179,8,.1); color: var(--yellow); border: 1px solid rgba(234,179,8,.2); }
+  .badge-physical, .badge-cloud, .badge-edge { background: rgba(255,255,255,.06); color: #a1a1aa; border: 1px solid rgba(255,255,255,.1); }
 
   /* ── Prep light ─────────────────────────────────────── */
   .light-indicator { display: inline-flex; gap: 8px; margin-top: .4rem; }
@@ -360,7 +384,9 @@
   }
 
   /* ── Sidebar ────────────────────────────────────────── */
-  .sidebar h2 { font-size: .85rem; font-weight: 600; margin-bottom: .75rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); }
+  .sidebar h2 { font-size: .85rem; font-weight: 600; margin-bottom: .75rem; padding-bottom: .5rem; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .reset-btn { background: none; border: 1px solid var(--border); border-radius: 6px; padding: .15rem .4rem; font-size: .75rem; cursor: pointer; color: var(--muted); transition: color .2s, border-color .2s; line-height: 1; }
+  .reset-btn:hover { color: var(--text); border-color: var(--text); }
 
   /* ── Toggle Switch ──────────────────────────────────── */
   .toggle-row {
@@ -472,7 +498,7 @@
 <body>
 
 <header>
-  <h1><span>⬡</span> OR Edge Agent</h1>
+  <h1><span>⬡</span> Operation Room Edge Agent</h1>
   <div class="conn-status">
     <div class="conn-dot" id="connDot"></div>
     <span id="connLabel">Connecting…</span>
@@ -580,6 +606,7 @@
                 <div class="node-subtitle">Ministral 3B · pydantic-ai · tool calling</div>
               </div>
             </div>
+            <div class="agent-ticker" id="agent-ticker"><span id="agent-ticker-inner"></span></div>
             <div class="node-body" id="body-agent">Idle</div>
 
             <div class="mcp-compact">
@@ -736,7 +763,7 @@
       <label for="offlineToggle">Simulate offline (no cloud)</label>
       <span class="offline-badge online" id="offlineBadge">online</span>
     </div>
-    <h2>Quick Scenarios</h2>
+    <h2>Quick Scenarios <button class="reset-btn" onclick="resetPipeline()" title="Reset dashboard">⟳</button></h2>
     <div class="scenario-bar">
       <button class="scenario-btn" onclick="runScenario('missing_scissors')">Missing Scissors</button>
       <button class="scenario-btn" onclick="runScenario('missing_suction_tip')">Missing Suction Tip</button>
@@ -840,6 +867,12 @@ function resetPipeline() {
   if (overlay) { overlay.style.display = 'none'; }
   const overlayPh = document.getElementById('detectorOverlayPlaceholder');
   if (overlayPh) { overlayPh.style.display = ''; }
+
+  // Clear agent ticker
+  const ticker = document.getElementById('agent-ticker');
+  const tickerInner = document.getElementById('agent-ticker-inner');
+  if (ticker) ticker.classList.remove('has-content');
+  if (tickerInner) tickerInner.innerHTML = '';
 
   // Clear event log
   const log = document.getElementById('eventLog');
@@ -1084,6 +1117,46 @@ function activateTool(ev) {
   }
 }
 
+const tickerStepColors = {
+  reasoning: '#6366f1',
+  'get surgical pathway': '#22c55e',
+  'reconcile instruments': '#06b6d4',
+  'create OR task': '#22c55e',
+  'request spd resupply': '#3b82f6',
+  'set OR prep light': '#ef4444',
+  'inspect scene local': '#eab308',
+  'inspect scene remote': '#a855f7',
+};
+
+function updateAgentTicker(ev) {
+  const inner = document.getElementById('agent-ticker-inner');
+  const ticker = document.getElementById('agent-ticker');
+  if (!inner || !ticker) return;
+  const dot = '<span class="tick-dot">\u00b7</span>';
+
+  if (ev.status === 'thinking' && ev.summary) {
+    const steps = ev.summary.split('\u2192').map(s => s.trim());
+    const latest = steps[steps.length - 1];
+    const c = tickerStepColors[latest] || '#d4d4d8';
+    if (inner.innerHTML) inner.innerHTML += dot;
+    inner.innerHTML += '<span style="color:' + c + '">' + esc(latest) + '</span>';
+    ticker.classList.add('has-content');
+  } else if (ev.status === 'thinking') {
+    const c = tickerStepColors['reasoning'] || '#d4d4d8';
+    inner.innerHTML = '<span style="color:' + c + '">reasoning</span>';
+    ticker.classList.add('has-content');
+  } else if (ev.status === 'done') {
+    if (inner.innerHTML) inner.innerHTML += dot;
+    inner.innerHTML += '<span class="tick-result">\u2713 done</span>';
+    ticker.classList.add('has-content');
+  } else if (ev.status === 'error') {
+    if (inner.innerHTML) inner.innerHTML += dot;
+    inner.innerHTML += '<span class="tick-error">\u2717 error</span>';
+    ticker.classList.add('has-content');
+  }
+  ticker.scrollLeft = ticker.scrollWidth;
+}
+
 function updateBody(comp, ev) {
   const body = document.getElementById('body-' + comp);
   if (!body) return;
@@ -1116,12 +1189,15 @@ function updateBody(comp, ev) {
     if (ev.unaccounted) parts.push('Unaccounted: <code>' + esc(ev.unaccounted.join(', ') || 'none') + '</code>');
     body.innerHTML = parts.join(' | ') || esc(detail) || 'Done';
   } else if (comp === 'agent') {
+    updateAgentTicker(ev);
     let html = '';
     if (ev.status) html += 'Status: <code>' + esc(ev.status) + '</code><br>';
-    if (ev.tool_calls != null) html += 'Tool calls: <code>' + ev.tool_calls + '</code>';
-    if (ev.llm_iterations != null) html += ' &middot; LLM iterations: <code>' + ev.llm_iterations + '</code>';
-    if (ev.tool_calls != null || ev.llm_iterations != null) html += '<br>';
-    if (ev.summary) html += renderMd(ev.summary);
+    if (ev.status === 'done') {
+      if (ev.tool_calls != null) html += 'Tool calls: <code>' + ev.tool_calls + '</code>';
+      if (ev.llm_iterations != null) html += ' &middot; LLM iterations: <code>' + ev.llm_iterations + '</code>';
+      if (ev.tool_calls != null || ev.llm_iterations != null) html += '<br>';
+      if (ev.summary) html += renderMd(ev.summary);
+    }
     body.innerHTML = html || renderMd(detail) || 'Active';
     maybeAddToggle(body);
   } else if (comp === 'tasks') {

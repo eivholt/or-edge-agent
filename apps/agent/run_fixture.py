@@ -99,10 +99,16 @@ class AgentDeps:
         if self._tools_used is None:
             self._tools_used = []
 
+    _tool_display_names = {
+        "create_synthetic_or_task": "create OR task",
+        "set_or_prep_light": "set OR prep light",
+    }
+
     def emit_tool_progress(self, tool_name: str):
         """Emit an agent status update showing tool progress."""
         self._tool_count += 1
-        self._tools_used.append(tool_name.replace("_", " "))
+        display = self._tool_display_names.get(tool_name, tool_name.replace("_", " "))
+        self._tools_used.append(display)
         if self.emit:
             progress = " → ".join(self._tools_used)
             self.emit("agent", status="thinking",
