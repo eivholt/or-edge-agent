@@ -11,7 +11,7 @@ EMR_BASE_URL = "http://localhost:9000"
 
 
 @mcp.tool()
-async def get_surgical_pathway(case_id: str) -> dict:
+async def get_case(case_id: str) -> dict:
     """
     Return the synthetic surgical pathway for a case.
 
@@ -43,7 +43,7 @@ async def get_case_setup_requirements(case_id: str) -> dict:
 
 
 @mcp.tool()
-async def create_or_task(
+async def create_task(
     case_id: str,
     task_type: str,
     priority: str,

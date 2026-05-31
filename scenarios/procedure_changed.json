@@ -1,9 +1,0 @@
-{
-  "event_id": "evt-0002",
-  "room_id": "OR-2",
-  "case_id": "CASE-2001",
-  "event_type": "visually_ready_but_pathway_changed",
-  "zone": "back_table",
-  "image_path": "frames/frame_procedure_changed.png",
-  "timestamp": "2026-05-15T12:05:00+02:00"
-}

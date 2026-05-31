@@ -5,5 +5,11 @@
   "event_type": "or_setup_state_change",
   "zone": "back_table",
   "image_path": "frames/frame_missing_something.png",
-  "timestamp": "2026-05-15T12:05:00+02:00"
+  "timestamp": "2026-05-15T12:05:00+02:00",
+  "visible_items": {
+    "scalpel": 1,
+    "scissors": 1,
+    "sponge": 3,
+    "tweezers": 2
+  }
 }

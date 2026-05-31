@@ -39,48 +39,24 @@ VLM_SYSTEM_PROMPT = (
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
 INSTRUCTIONS = """\
-You are a local OR logistics agent (synthetic demo). Coordinate supply, porter, specimen, and review workflows. Never diagnose or prescribe.
+You are a local OR logistics agent (synthetic demo). Coordinate supply and review workflows. Never diagnose or prescribe.
 
 WORKFLOW — always follow this order:
-1. Call get_surgical_pathway(case_id) to fetch the EMR case and required equipment.
-2. Call reconcile_instruments() to compare detected items against requirements.
-3. VLM STEP (MANDATORY for these event_types): instrument_out_of_zone, sterile_zone_ambiguity, specimen_ready_check, specimen_container_seen, room_turnover_check, ppe_compliance_check.
-   If the event_type is in this list, you MUST call inspect_scene NOW, BEFORE any other action:
-   - Use image_path from the event. If the event has a "vlm_question" field, use that EXACT text as the question.
-   - For sterile-zone checks (instrument_out_of_zone, sterile_zone_ambiguity): construct the VLM question by listing ALL instrument type names from required_items (no quantities).
-     Use this template exactly — fill in ALL types, never omit any:
-     "Look at the green/blue drape. Is even ONE of these outside the drape, on the bare table: scalpel, scissors, sponge, tweezers?"
-     Replace the type list with the actual types from required_items. Always include EVERY type. Do NOT shorten or summarize the list.
-   Additionally, if the EI object-detection model has detected enough of the instruments required by the EMR surgical pathway (i.e. all_present=true or most items accounted for), use inspect_scene to verify whether any instruments are outside the sterile zone.
-4. Read the reconciliation results. Execute the proposed_tool_calls from reconciliation. Do NOT invent extra tasks beyond what reconciliation and the rules below require.
-5. For each missing_supply task, ALSO call request_spd_resupply for that item. A nurse runner delivers sterile items into the OR (robots cannot enter the sterile field).
-6. End with exactly one set_or_prep_light call.
+1. Call get_case(case_id) to fetch the EMR case and required equipment.
+2. Call check_supplies() to compare detected items against requirements.
+3. Call inspect_scene to verify the sterile zone.
+   Use image_path from the event. Ask the VLM whether ANY instrument is outside the sterile drape.
+4. Call set_stacklight:
+   - yellow if ANY supply deficit was found OR the sterile zone has an issue.
+   - green if all supplies are present AND the sterile zone is clear.
+5. If there were deficits from step 2:
+   - For EACH deficit item, call create_task with task_type="missing_supply".
+   - For EACH deficit item, call request_resupply for that item.
+6. If inspect_scene found a sterile zone issue, call create_task with task_type="human_review".
 
-Rules:
-
-- If proposed_tool_calls is empty [] and all_present=true AND event_type is NOT in the VLM list above → set_or_prep_light green, short summary. Nothing else.
-- Items in flagged_no_deficit have NO deficit (visible >= required). NEVER create tasks for them.
-
-- proposed_tool_calls not empty → execute each proposed call exactly as given. Do not change task_type.
-  For each missing_supply task, also call request_spd_resupply with the item name, room_id, and the SAME urgency as the task priority (e.g. task priority="normal" → SPD urgency="normal").
-  Then set_or_prep_light yellow.
-
-- visually_ready_but_pathway_changed → proposed_tool_calls includes procedure_change_review + porter_hold + yellow light. Execute all of them, plus any deficit tasks.
-
-- VLM event-type actions (AFTER calling VLM in step 3):
-    - instrument_out_of_zone → human_review + yellow light
-    - sterile_zone_ambiguity → human_review + yellow light
-    - specimen_ready_check / specimen_container_seen → You MUST create EXACTLY TWO tasks:
-      1. create_or_task with task_type="specimen_handoff" (nurse receives specimen for pathology)
-      2. create_or_task with task_type="porter_hold" (porter picks up specimen and transports to pathology lab)
-      Then set yellow light.
-    - room_turnover_check → Include the VLM findings in a porter_hold task summary. Then set red light.
-    - ppe_compliance_check → human_review + yellow light UNLESS VLM verdict is true (compliant), then green light.
-
-IMPORTANT: Every scenario MUST end with exactly one set_or_prep_light call. Green = no issues, Yellow = action needed, Red = critical.
-
-Never ask the user for input or confirmation. Always decide and act autonomously.
-Your final text response must be a SHORT summary (2-4 sentences max). Never include code blocks, function signatures, or raw arguments in your final response."""
+IMPORTANT: Every run MUST include exactly one set_stacklight call.
+Never ask the user for input. Always decide and act autonomously.
+Your final text response must be a SHORT summary (2-4 sentences max)."""
 
 
 # ── Dependencies (passed via RunContext) ─────────────────────────────
@@ -90,8 +66,8 @@ Your final text response must be a SHORT summary (2-4 sentences max). Never incl
 class AgentDeps:
     event: dict
     resources: dict
-    case: dict = None  # populated by get_surgical_pathway tool
-    reconciliation: dict = None  # populated by reconcile_instruments tool
+    case: dict = None  # populated by get_case tool
+    reconciliation: dict = None  # populated by check_supplies tool
     emit: object = None  # optional SSE callback: emit(component, **kwargs)
     _tool_count: int = 0  # tracks tool calls for iteration progress
     _tools_used: list = None  # names of tools called so far
@@ -101,20 +77,32 @@ class AgentDeps:
             self._tools_used = []
 
     _tool_display_names = {
-        "create_or_task": "create OR task",
-        "set_or_prep_light": "set OR prep light",
+        "create_task": "create task",
+        "set_stacklight": "set stacklight",
     }
 
-    def emit_tool_progress(self, tool_name: str):
+    _MAX_CONTEXT = 8192  # Ministral 3B context window
+    _prev_cumulative_input: int = 0  # for computing per-request input
+
+    def emit_tool_progress(self, tool_name: str, ctx=None):
         """Emit an agent status update showing tool progress."""
         self._tool_count += 1
         display = self._tool_display_names.get(tool_name, tool_name.replace("_", " "))
         self._tools_used.append(display)
         if self.emit:
             progress = " → ".join(self._tools_used)
+            extra = {}
+            if ctx and hasattr(ctx, "usage") and ctx.usage and ctx.usage.input_tokens:
+                # input_tokens is cumulative; compute per-request delta = current context size
+                cumulative = ctx.usage.input_tokens
+                per_request = cumulative - self._prev_cumulative_input
+                self._prev_cumulative_input = cumulative
+                extra["context_tokens"] = per_request
+                extra["max_context"] = self._MAX_CONTEXT
             self.emit("agent", status="thinking",
                       summary=progress,
-                      detail=progress)
+                      detail=progress,
+                      **extra)
 
 
 # ── Agent ────────────────────────────────────────────────────────────
@@ -129,7 +117,7 @@ or_agent = Agent(
     _model,
     instructions=INSTRUCTIONS,
     deps_type=AgentDeps,
-    model_settings=ModelSettings(temperature=0, max_tokens=700),
+    model_settings=ModelSettings(temperature=0, max_tokens=1024),
 )
 
 
@@ -137,15 +125,13 @@ or_agent = Agent(
 
 
 @or_agent.tool
-def get_surgical_pathway(
+def get_case(
     ctx: RunContext[AgentDeps],
     case_id: str,
 ) -> dict:
-    """Fetch the surgical pathway and required equipment list from the EMR.
+    """Fetch the surgical case and required equipment list from the EMR.
 
     Call this FIRST to learn what instruments/supplies the procedure requires.
-    The returned data includes required_items, procedure name, phase, and
-    open workflow items.
 
     Args:
         case_id: The surgical case identifier (e.g. CASE-1042).
@@ -153,15 +139,14 @@ def get_surgical_pathway(
     r = httpx.get(f"{EMR_BASE_URL}/cases/{case_id}", timeout=10)
     r.raise_for_status()
     case = r.json()
-    # Store on deps so reconcile_instruments can use it
     ctx.deps.case = case
-    ctx.deps.emit_tool_progress("get_surgical_pathway")
+    ctx.deps.emit_tool_progress("get_case", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
-                      tool_name="get_surgical_pathway",
+                      tool_name="get_case",
                       tool_args={"case_id": case_id},
                       tool_result={"procedure": case.get("procedure"), "required_items": case.get("required_items")},
-                      detail=f"get_surgical_pathway(case_id={case_id})")
+                      detail=f"get_case(case_id={case_id})")
         ctx.deps.emit("emr_api",
                       case_id=case_id,
                       procedure=case.get("procedure", ""),
@@ -171,36 +156,31 @@ def get_surgical_pathway(
 
 
 @or_agent.tool
-def reconcile_instruments(
+def check_supplies(
     ctx: RunContext[AgentDeps],
 ) -> dict:
-    """Compare detected instruments against the surgical pathway requirements.
+    """Compare detected instruments against the surgical case requirements.
 
-    Call this AFTER get_surgical_pathway. Uses the detector's visible_items
-    from the current scene event and the case requirements to identify
-    supply gaps, unaccounted items, and proposed corrective actions.
-
-    Returns reconciliation results including all_present flag,
-    actionable_missing items, unaccounted items, and proposed_tool_calls.
+    Call this AFTER get_case. Returns all_present flag and
+    a list of deficits with item name, have count, and need count.
     """
     event = ctx.deps.event
     case = ctx.deps.case
     if case is None:
-        return {"error": "No case data — call get_surgical_pathway first."}
+        return {"error": "No case data — call get_case first."}
     recon = reconcile_setup(event, case)
-    # Store on deps for prompt context
     ctx.deps.reconciliation = recon
-    ctx.deps.emit_tool_progress("reconcile_instruments")
+    ctx.deps.emit_tool_progress("check_supplies", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
-                      tool_name="reconcile_instruments",
+                      tool_name="check_supplies",
                       tool_args={},
                       tool_result=recon,
-                      detail=f"reconcile_instruments()")
+                      detail="check_supplies()")
         ctx.deps.emit("reconcile",
                       all_present=recon["all_present"],
-                      actionable_missing=recon.get("actionable_missing_detail", recon["actionable_missing"]),
-                      unaccounted=recon.get("unaccounted_detail", recon["unaccounted"]),
+                      actionable_missing=[f"{d['item']} ({d['have']}/{d['need']})" for d in recon.get("deficits", [])],
+                      unaccounted=[],
                       detail=_reconcile_detail(recon))
     return recon
 
@@ -208,13 +188,12 @@ def reconcile_instruments(
 def _reconcile_detail(recon: dict) -> str:
     if recon["all_present"]:
         return "All present"
-    gaps = len(recon["actionable_missing"])
-    unacc = len(recon["unaccounted"])
-    return f"{gaps} gaps, {unacc} unaccounted"
+    n = len(recon.get("deficits", []))
+    return f"{n} deficit(s)"
 
 
 @or_agent.tool
-def create_or_task(
+def create_task(
     ctx: RunContext[AgentDeps],
     case_id: str,
     task_type: str,
@@ -222,16 +201,11 @@ def create_or_task(
     summary: str,
     reason: str,
 ) -> dict:
-    """Create a synthetic OR workflow task.
-
-    Use for missing_supply, human_review, porter_hold, porter_release,
-    specimen_handoff, wrong_case_cart, or procedure_change_review tasks.
+    """Create a workflow task.
 
     Args:
         case_id: The case identifier.
-        task_type: One of missing_supply, human_review, porter_hold,
-            porter_release, specimen_handoff, wrong_case_cart,
-            procedure_change_review.
+        task_type: One of missing_supply, human_review.
         priority: One of low, normal, high.
         summary: Short description of what is missing or needs review.
         reason: Why this task is being created.
@@ -244,39 +218,29 @@ def create_or_task(
         "summary": summary,
         "reason": reason,
     }
-    ctx.deps.emit_tool_progress("create_or_task")
+    ctx.deps.emit_tool_progress("create_task", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
-                      tool_name="create_or_task",
+                      tool_name="create_task",
                       tool_args={"case_id": case_id, "task_type": task_type, "priority": priority, "summary": summary},
                       tool_result=result,
-                      detail=f"create_or_task(task_type={task_type})")
+                      detail=f"create_task(task_type={task_type})")
         ctx.deps.emit("tasks",
                       task_type=task_type,
                       priority=priority,
                       summary=summary,
                       detail=summary)
-        # Porter tasks also appear in the SPD/Porter node
-        if task_type in ("porter_hold", "porter_release"):
-            ctx.deps.emit("spd",
-                          item_name=task_type.replace("_", " "),
-                          urgency=priority,
-                          delivery_method="porter",
-                          detail=f"Porter: {summary}")
     return result
 
 
 @or_agent.tool
-def request_spd_resupply(
+def request_resupply(
     ctx: RunContext[AgentDeps],
     item_name: str,
     room_id: str,
     urgency: str,
 ) -> dict:
     """Request sterile processing delivery for a missing item.
-
-    Use only when explicitly told to order a sterile resupply delivery.
-    Do not use for items requiring direct human sign-off.
 
     Args:
         item_name: Name of the item to resupply.
@@ -290,13 +254,13 @@ def request_spd_resupply(
         "urgency": urgency,
         "status": "requested",
     }
-    ctx.deps.emit_tool_progress("request_spd_resupply")
+    ctx.deps.emit_tool_progress("request_resupply", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
-                      tool_name="request_spd_resupply",
+                      tool_name="request_resupply",
                       tool_args={"item_name": item_name, "room_id": room_id, "urgency": urgency},
                       tool_result=result,
-                      detail=f"request_spd_resupply(item={item_name})")
+                      detail=f"request_resupply(item={item_name})")
         ctx.deps.emit("spd",
                       item_name=item_name,
                       urgency=urgency,
@@ -306,20 +270,19 @@ def request_spd_resupply(
 
 
 @or_agent.tool
-def set_or_prep_light(
+def set_stacklight(
     ctx: RunContext[AgentDeps],
     room_id: str,
     color: str,
     reason: str,
 ) -> dict:
-    """Set the OR prep status light.
+    """Set the OR prep status stacklight.
 
-    Use green for logistics-ready, yellow for review-needed,
-    red only for safety exceptions.
+    Green = logistics-ready, Yellow = review-needed.
 
     Args:
         room_id: The OR room identifier.
-        color: One of green, yellow, red.
+        color: One of green, yellow.
         reason: Short explanation of why this color was chosen.
     """
     result = {
@@ -328,13 +291,13 @@ def set_or_prep_light(
         "reason": reason,
         "status": "set",
     }
-    ctx.deps.emit_tool_progress("set_or_prep_light")
+    ctx.deps.emit_tool_progress("set_stacklight", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
-                      tool_name="set_or_prep_light",
+                      tool_name="set_stacklight",
                       tool_args={"room_id": room_id, "color": color, "reason": reason},
                       tool_result=result,
-                      detail=f"set_or_prep_light(color={color})")
+                      detail=f"set_stacklight(color={color})")
         ctx.deps.emit("prep_light",
                       color=color,
                       reason=reason,
@@ -357,10 +320,13 @@ def inspect_scene(
         image_path: Path to an image file (relative to data/ or absolute).
         question: What to ask the VLM about the image.
     """
-    # Override question with vlm_question from event if available
-    vlm_q = ctx.deps.event.get("vlm_question")
-    if vlm_q:
-        question = vlm_q
+    # Enrich question with known instrument types from the case
+    case = ctx.deps.case
+    if case and case.get("required_items"):
+        items = list(case["required_items"].keys())
+        item_list = ", ".join(items)
+        if item_list.lower() not in question.lower():
+            question = f"{question} The instrument types to look for: {item_list}."
 
     resolved = Path(image_path)
     if not resolved.is_absolute():
@@ -384,18 +350,12 @@ def inspect_scene(
     else:
         result = _inspect_local(ctx, resolved, image_path, question)
 
-    # Include pending reconciliation context so the model remembers to act
-    recon = ctx.deps.reconciliation
-    if recon and not recon.get("all_present"):
-        pending = recon.get("proposed_tool_calls", [])
-        if pending:
-            result["pending_actions"] = f"{len(pending)} proposed tool calls from reconciliation still need to be executed"
     return result
 
 
 def _inspect_local(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, question: str) -> dict:
     """Run VLM inspection via the local Ministral 3B model."""
-    ctx.deps.emit_tool_progress("inspect_scene_local")
+    ctx.deps.emit_tool_progress("inspect_scene_local", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("vlm_local", question=question, detail="Local VLM: working\u2026")
 
@@ -479,7 +439,7 @@ def _inspect_remote(ctx: RunContext[AgentDeps], resolved: Path, image_path: str,
     """Run VLM inspection via the remote cloud VLM."""
     from apps.vlm.ask_vlm import ask_vlm
 
-    ctx.deps.emit_tool_progress("inspect_scene_remote")
+    ctx.deps.emit_tool_progress("inspect_scene_remote", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("vlm_remote", question=question, detail="Remote VLM: working\u2026")
 
@@ -535,70 +495,26 @@ def get_resources(room_id: str) -> dict:
 @logfire.instrument("reconcile_setup case_id={case[case_id]}")
 def reconcile_setup(event: dict, case: dict) -> dict:
     """Run deterministic reconciliation — no LLM needed."""
-    calls = reconcile(event, case)
+    deficits = reconcile(event, case)
+    all_present = len(deficits) == 0
 
-    # Normalise required_items to dict[str, int]
-    raw_required = case.get("required_items", [])
-    if isinstance(raw_required, dict):
-        required = dict(raw_required)
+    if all_present:
+        summary = "All instrument types match or exceed requirements."
+        recommended_light = "green"
     else:
-        required = {}
-        for item in raw_required:
-            required[item] = required.get(item, 0) + 1
-
-    # Normalise visible_items to dict[str, int]
-    raw_visible = event.get("visible_items", [])
-    if isinstance(raw_visible, dict):
-        visible = dict(raw_visible)
-    else:
-        visible = {}
-        for item in raw_visible:
-            visible[item] = visible.get(item, 0) + 1
-
-    missing = set(event.get("missing_or_uncertain", []))
-
-    # Items where detector flagged uncertain AND pathway needs them AND there's a deficit
-    actionable_missing = sorted(
-        item for item in missing
-        if item in required and visible.get(item, 0) < required[item]
-    )
-
-    # Items flagged uncertain but with no actual deficit (have >= need) — ignore these
-    flagged_no_deficit = sorted(
-        item for item in missing
-        if item in required and visible.get(item, 0) >= required[item]
-    )
-
-    # Items with count deficit (need > have) that weren't flagged
-    unaccounted = sorted(
-        item for item, need in required.items()
-        if item not in missing and visible.get(item, 0) < need
-    )
-
-    # Build detailed lists with have/need counts for dashboard display
-    actionable_missing_detail = [
-        f"{item} ({visible.get(item, 0)}/{required[item]})"
-        for item in actionable_missing
-    ]
-    unaccounted_detail = [
-        f"{item} ({visible.get(item, 0)}/{required[item]})"
-        for item in unaccounted
-    ]
-
-    truly_clear = len(calls) == 0 and not actionable_missing and not unaccounted
+        parts = [f"{d['item']} ({d['have']}/{d['need']})" for d in deficits]
+        summary = f"{len(deficits)} deficit(s): {', '.join(parts)}. Create missing_supply task and request_resupply for each."
+        recommended_light = "yellow"
 
     return {
-        "actionable_missing": actionable_missing,
-        "actionable_missing_detail": actionable_missing_detail,
-        "flagged_no_deficit": flagged_no_deficit,
-        "unaccounted": unaccounted,
-        "unaccounted_detail": unaccounted_detail,
-        "all_present": truly_clear,
-        "proposed_tool_calls": calls,
+        "all_present": all_present,
+        "deficits": deficits,
+        "recommended_light": recommended_light,
+        "summary": summary,
     }
 
 
-@logfire.instrument("ask_agent case_id={event[case_id]} event_type={event[event_type]}")
+@logfire.instrument("ask_agent case_id={event[case_id]}")
 def ask_agent(event: dict, resources: dict, emit=None) -> dict:
     deps = AgentDeps(
         event=event,
@@ -608,7 +524,7 @@ def ask_agent(event: dict, resources: dict, emit=None) -> dict:
 
     prompt = json.dumps(
         {
-            "event": {k: v for k, v in event.items() if k != "missing_or_uncertain"},
+            "event": event,
             "resources": {k: v for k, v in resources.items() if k != "cloud_connected"},
         },
         indent=2,
@@ -643,7 +559,7 @@ def ask_agent(event: dict, resources: dict, emit=None) -> dict:
     has_human_review = any(
         tc["arguments"].get("task_type") == "human_review"
         for tc in tool_calls
-        if tc["name"] == "create_or_task"
+        if tc["name"] == "create_task"
     )
 
     # Count LLM iterations (each ModelResponse = one LLM round-trip)
@@ -652,11 +568,29 @@ def ask_agent(event: dict, resources: dict, emit=None) -> dict:
         if getattr(msg, "kind", "") == "response"
     )
 
+    # Collect per-iteration token usage for context gauge
+    usage_total = result.usage()
+    context_usage = {
+        "input_tokens": usage_total.input_tokens,
+        "output_tokens": usage_total.output_tokens,
+        "requests": usage_total.requests,
+        "max_context": AgentDeps._MAX_CONTEXT,
+    }
+    # Peak input tokens = max across iterations
+    peak_input = 0
+    for msg in result.all_messages():
+        if getattr(msg, "kind", "") == "response":
+            u = getattr(msg, "usage", None)
+            if u and u.input_tokens:
+                peak_input = max(peak_input, u.input_tokens)
+    context_usage["peak_input_tokens"] = peak_input
+
     return {
         "decision_summary": result.output if isinstance(result.output, str) else str(result.output),
         "tool_calls": tool_calls,
         "requires_human_review": has_human_review,
         "llm_iterations": llm_iterations,
+        "context_usage": context_usage,
     }
 
 

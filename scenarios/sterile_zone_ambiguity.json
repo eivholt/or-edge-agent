@@ -5,5 +5,11 @@
   "event_type": "sterile_zone_ambiguity",
   "zone": "back_table",
   "image_path": "frames/frame_sterile_zone_ambiguity.png",
-  "timestamp": "2026-05-15T13:30:00+02:00"
+  "timestamp": "2026-05-15T13:30:00+02:00",
+  "visible_items": {
+    "scalpel": 1,
+    "scissors": 3,
+    "sponge": 6,
+    "tweezers": 2
+  }
 }

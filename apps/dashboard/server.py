@@ -257,13 +257,12 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     _emit("detector",
           event_type=event.get("event_type"),
           visible_items=visible,
-          missing_items=event.get("missing_or_uncertain", []) if not detected_labels else [],
+          missing_items=[],
           image_url=image_url,
           detection_image_url=detection_image_url,
           inference_ms=inference_ms,
           detected_labels=detected_labels,
-          detail=f"Detected {len(detected_labels) if detected_labels else total_visible} items"
-                 + (f", {len(event.get('missing_or_uncertain', []))} uncertain" if not detected_labels and event.get('missing_or_uncertain') else ""))
+          detail=f"Detected {len(detected_labels) if detected_labels else total_visible} items")
 
     # 2. Resources (static context for the agent)
     resources = {
@@ -286,10 +285,12 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
 
     tool_calls = decision.get("tool_calls", [])
     llm_iters = decision.get("llm_iterations", 0)
+    ctx_usage = decision.get("context_usage", {})
     _emit("agent",
           status="done",
           tool_calls=len(tool_calls),
           llm_iterations=llm_iters,
+          context_usage=ctx_usage,
           summary=decision.get("decision_summary", ""),
           detail=f"{len(tool_calls)} tool call(s)")
 

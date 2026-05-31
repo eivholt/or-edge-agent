@@ -40,14 +40,10 @@ def get_available_or_resources(room_id: str) -> dict:
 
 
 @mcp.tool()
-def request_spd_resupply(item_name: str, room_id: str, urgency: str) -> dict:
+def request_resupply(item_name: str, room_id: str, urgency: str) -> dict:
     """
-    Request synthetic sterile processing delivery for a missing item.
+    Request sterile processing delivery for a missing item.
 
-    Use this when an OR setup task requires a missing physical item and
-    synthetic policy allows delivery.
-
-    Do not use for items requiring direct human sign-off.
     Urgency must be one of: low, normal, high.
     """
     if urgency not in {"low", "normal", "high"}:
@@ -63,18 +59,14 @@ def request_spd_resupply(item_name: str, room_id: str, urgency: str) -> dict:
 
 
 @mcp.tool()
-def set_or_prep_light(room_id: str, color: str) -> dict:
+def set_stacklight(room_id: str, color: str) -> dict:
     """
-    Set the demo OR prep status light.
+    Set the OR prep status stacklight.
 
-    Use green for simulated logistics-ready state.
-    Use yellow for review-needed state.
-    Use red only for high-confidence simulated safety or custody exceptions.
-    Never use this as a real clinical alarm.
-    Light stays on until the next agent run.
+    Green = logistics-ready, Yellow = review-needed.
     """
-    if color not in {"green", "yellow", "red"}:
-        return {"error": "color must be green, yellow, or red"}
+    if color not in {"green", "yellow"}:
+        return {"error": "color must be green or yellow"}
 
     return {
         "room_id": room_id,

@@ -217,6 +217,25 @@
   .agent-ticker:empty { display: none; }
   .agent-ticker:not(.has-content) { display: none; }
   .tick-dot { color: #71717a; margin: 0 .35em; }
+
+  /* Context gauge */
+  .context-gauge { display: none; margin: .3rem 0 .1rem; }
+  .context-gauge.visible { display: block; }
+  .context-gauge-label {
+    font-size: .58rem; color: var(--muted); margin-bottom: .15rem;
+    display: flex; justify-content: space-between; align-items: center;
+    font-family: 'JetBrains Mono','Fira Code',monospace;
+  }
+  .context-gauge-bar {
+    height: 5px; background: rgba(255,255,255,.1); border-radius: 3px;
+    overflow: hidden;
+  }
+  .context-gauge-fill {
+    height: 100%; border-radius: 3px;
+    transition: width .4s ease, background .4s ease;
+    width: 0%;
+  }
+
   .tick-step { color: var(--cyan); }
   .tick-result { color: var(--green, #4ade80); }
   .tick-error { color: var(--red, #f87171); }
@@ -605,6 +624,15 @@
               </div>
             </div>
             <div class="agent-ticker" id="agent-ticker"><span id="agent-ticker-inner"></span></div>
+            <div class="context-gauge" id="context-gauge">
+              <div class="context-gauge-label">
+                <span>context</span>
+                <span id="context-gauge-text">0 / 8192</span>
+              </div>
+              <div class="context-gauge-bar">
+                <div class="context-gauge-fill" id="context-gauge-fill"></div>
+              </div>
+            </div>
             <div class="node-body" id="body-agent">Idle</div>
 
             <div class="mcp-compact">
@@ -765,13 +793,8 @@
       <button class="scenario-btn" onclick="runScenario('missing_scissors')">Missing Scissors</button>
       <button class="scenario-btn" onclick="runScenario('missing_something')">Missing Instrument</button>
       <button class="scenario-btn" onclick="runScenario('all_present')">All Present</button>
-      <button class="scenario-btn" onclick="runScenario('procedure_changed')">Procedure Changed</button>
-      <button class="scenario-btn" onclick="runScenario('specimen_handoff')">Specimen Handoff</button>
       <button class="scenario-btn" onclick="runScenario('sterile_zone_ambiguity')">Sterile Zone Ambiguity</button>
       <button class="scenario-btn" onclick="runScenario('instrument_out_of_zone')">Instrument Out of Zone</button>
-      <button class="scenario-btn" onclick="runScenario('specimen_ready_check')">Specimen Ready</button>
-      <button class="scenario-btn" onclick="runScenario('room_turnover_check')">Room Turnover</button>
-      <button class="scenario-btn" onclick="runScenario('ppe_compliance_check')">PPE Compliance</button>
     </div>
     <h2>Event Log</h2>
     <div class="event-log" id="eventLog"></div>
@@ -870,6 +893,14 @@ function resetPipeline() {
   const tickerInner = document.getElementById('agent-ticker-inner');
   if (ticker) ticker.classList.remove('has-content');
   if (tickerInner) tickerInner.innerHTML = '';
+
+  // Reset context gauge
+  const gauge = document.getElementById('context-gauge');
+  const gaugeFill = document.getElementById('context-gauge-fill');
+  const gaugeText = document.getElementById('context-gauge-text');
+  if (gauge) gauge.classList.remove('visible');
+  if (gaugeFill) { gaugeFill.style.width = '0%'; gaugeFill.style.background = ''; }
+  if (gaugeText) gaugeText.textContent = '0 / 8192';
 
   // Clear event log
   const log = document.getElementById('eventLog');
@@ -989,22 +1020,20 @@ function maybeAddToggle(body) {
 // ── Tool-call activation inside agent MCP pills ─────
 const toolToMcp = {
   get_available_or_resources: 'logistics',
-  set_or_prep_light: 'logistics',
-  request_spd_resupply: 'logistics',
-  get_surgical_pathway: 'emr',
-  get_case_setup_requirements: 'emr',
-  create_or_task: 'emr',
-  reconcile_instruments: 'logistics',
+  set_stacklight: 'logistics',
+  request_resupply: 'logistics',
+  get_case: 'emr',
+  create_task: 'emr',
+  check_supplies: 'logistics',
   inspect_scene: 'vlm',
 };
 
 // Map tool names to dashboard node components for early activation
 const toolToNode = {
-  get_surgical_pathway: 'emr_api',
-  get_case_setup_requirements: 'emr_api',
-  create_or_task: 'tasks',
-  request_spd_resupply: 'spd',
-  reconcile_instruments: 'reconcile',
+  get_case: 'emr_api',
+  create_task: 'tasks',
+  request_resupply: 'spd',
+  check_supplies: 'reconcile',
 };
 
 const mcpPillIds = { logistics: 'mcp-or-logistics', emr: 'mcp-synthetic-emr', vlm: 'mcp-vlm-tools' };
@@ -1100,7 +1129,7 @@ function activateTool(ev) {
   activateNode('agent');
 
   // Activate right connector for external API calls
-  const externalTools = ['inspect_scene', 'get_surgical_pathway', 'get_case_setup_requirements', 'create_or_task'];
+  const externalTools = ['inspect_scene', 'get_case', 'create_task'];
   if (externalTools.includes(name)) {
     const cr = document.getElementById('conn-right');
     if (cr) {
@@ -1113,13 +1142,14 @@ function activateTool(ev) {
 
 const tickerStepColors = {
   reasoning: '#6366f1',
-  'get surgical pathway': '#22c55e',
-  'reconcile instruments': '#06b6d4',
-  'create OR task': '#22c55e',
-  'request spd resupply': '#3b82f6',
-  'set OR prep light': '#ec4899',
-  'inspect scene local': '#eab308',
-  'inspect scene remote': '#a855f7',
+  'get case': '#22c55e',
+  'check supplies': '#06b6d4',
+  'create task': '#22c55e',
+  'request resupply': '#3b82f6',
+  'set stacklight': '#ec4899',
+  'inspect scene': '#f97316',
+  'inspect scene local': '#f97316',
+  'inspect scene remote': '#f97316',
 };
 
 function updateAgentTicker(ev) {
@@ -1149,6 +1179,36 @@ function updateAgentTicker(ev) {
     ticker.classList.add('has-content');
   }
   ticker.scrollLeft = ticker.scrollWidth;
+}
+
+function updateContextGauge(ev) {
+  const gauge = document.getElementById('context-gauge');
+  const fill = document.getElementById('context-gauge-fill');
+  const text = document.getElementById('context-gauge-text');
+  if (!gauge || !fill || !text) return;
+
+  let tokens = 0, max = 8192;
+
+  if (ev.status === 'thinking' && ev.context_tokens) {
+    tokens = ev.context_tokens;
+    max = ev.max_context || 8192;
+  } else if (ev.status === 'done' && ev.context_usage) {
+    tokens = ev.context_usage.peak_input_tokens || 0;
+    max = ev.context_usage.max_context || 8192;
+  } else {
+    return;
+  }
+
+  const pct = Math.min(100, (tokens / max) * 100);
+  fill.style.width = pct.toFixed(1) + '%';
+  text.textContent = tokens.toLocaleString() + ' / ' + max.toLocaleString();
+
+  // Color: green < 50%, yellow 50-75%, red > 75%
+  if (pct < 50) fill.style.background = '#22c55e';
+  else if (pct < 75) fill.style.background = '#eab308';
+  else fill.style.background = '#ef4444';
+
+  gauge.classList.add('visible');
 }
 
 function updateBody(comp, ev) {
@@ -1183,6 +1243,7 @@ function updateBody(comp, ev) {
     body.innerHTML = parts.join(' | ') || esc(detail) || 'Done';
   } else if (comp === 'agent') {
     updateAgentTicker(ev);
+    updateContextGauge(ev);
     let html = '';
     if (ev.status) html += 'Status: <code>' + esc(ev.status) + '</code><br>';
     if (ev.status === 'done') {
