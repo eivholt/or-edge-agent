@@ -289,7 +289,7 @@ class TestLevel3Nuanced:
             if "human_review" not in types:
                 errs.append("Expected human_review at low confidence, got: " + str(types))
             # Light is OK if VLM was invoked first (per instructions rule 4)
-            vlm_called = any(tc["name"] in ("inspect_scene_local", "inspect_scene_remote")
+            vlm_called = any(tc["name"] == "inspect_scene"
                              for tc in d.get("tool_calls", []))
             lights = _light_colors(d)
             if lights and not vlm_called:

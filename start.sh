@@ -201,13 +201,49 @@ case "${1:-all}" in
         show_status
         ;;
     all)
-        info "Starting all services..."
+        info "Starting all services (parallel)..."
         echo ""
-        start_llm
-        start_emr
-        start_dashboard
+        # Launch all three processes (nohup) without waiting
+        _launch_llm() {
+            if port_busy "$VLLM_PORT"; then ok "vLLM already running on :${VLLM_PORT}"; return 0; fi
+            info "Starting vLLM (${VLLM_MODEL})..."
+            source "${VLLM_VENV}/bin/activate"
+            nohup vllm serve "$VLLM_MODEL" \
+                --host 0.0.0.0 --port "$VLLM_PORT" --dtype auto \
+                --max-model-len 8192 --gpu-memory-utilization 0.48 \
+                --enable-auto-tool-choice --tool-call-parser mistral \
+                > "${LOG_DIR}/vllm.log" 2>&1 &
+            deactivate 2>/dev/null || true
+        }
+        _launch_emr() {
+            if port_busy "$EMR_PORT"; then ok "EMR API already running on :${EMR_PORT}"; return 0; fi
+            info "Starting EMR API..."
+            source "${APP_VENV}/bin/activate"
+            nohup uvicorn synthetic_emr.api:app \
+                --host 0.0.0.0 --port "$EMR_PORT" \
+                > "${LOG_DIR}/emr.log" 2>&1 &
+            deactivate 2>/dev/null || true
+        }
+        _launch_dash() {
+            if port_busy "$DASH_PORT"; then ok "Dashboard already running on :${DASH_PORT}"; return 0; fi
+            info "Starting Dashboard..."
+            source "${APP_VENV}/bin/activate"
+            nohup uvicorn apps.dashboard.server:app \
+                --host 0.0.0.0 --port "$DASH_PORT" \
+                > "${LOG_DIR}/dashboard.log" 2>&1 &
+            deactivate 2>/dev/null || true
+        }
+        _launch_llm
+        _launch_emr
+        _launch_dash
+        # Wait for fast services first, then vLLM
+        wait_for_port "$EMR_PORT"  "EMR API"   15 &
+        wait_for_port "$DASH_PORT" "Dashboard"  15 &
+        wait_for_port "$VLLM_PORT" "vLLM"      120 &
+        wait  # wait for all three background waits
         echo ""
         show_status
+        open_browser "$DASH_URL"
         ok "Dashboard: ${DASH_URL}"
         ;;
     *)

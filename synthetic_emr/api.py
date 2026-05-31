@@ -51,7 +51,7 @@ CASES = {
         "required_items": {
             "scalpel": 2,
             "scissors": 3,
-            "sponge": 4,
+            "sponge": 3,
             "tweezers": 2
         },
         "open_items": [

@@ -439,10 +439,7 @@
   .task-entry[data-type="porter"] { border-left-color:var(--purple); background:rgba(168,85,247,.04); }
   .task-entry[data-type="robot"] { border-left-color:var(--blue); background:rgba(59,130,246,.04); }
   .task-icon { font-size:.8rem; flex-shrink:0; line-height:1; }
-  .task-badge { font-size:.5rem; font-weight:700; text-transform:uppercase; padding:1px 5px; border-radius:3px; white-space:nowrap; flex-shrink:0; letter-spacing:.04em; }
-  .task-badge.high { background:rgba(239,68,68,.2); color:var(--red); border:1px solid rgba(239,68,68,.3); }
-  .task-badge.normal { background:rgba(234,179,8,.2); color:var(--yellow); border:1px solid rgba(234,179,8,.3); }
-  .task-badge.low { background:rgba(148,163,184,.15); color:var(--muted); border:1px solid rgba(148,163,184,.2); }
+  .task-badge { font-size:.5rem; font-weight:700; text-transform:uppercase; padding:1px 5px; border-radius:3px; white-space:nowrap; flex-shrink:0; letter-spacing:.04em; background:rgba(148,163,184,.15); color:var(--muted); border:1px solid rgba(148,163,184,.2); }
   .task-type { font-size:.66rem; font-weight:600; color:var(--text); }
   .task-summary { opacity:.65; font-size:.62rem; width:100%; padding-left:1.3rem; }
   .task-method { font-size:.56rem; font-weight:600; padding:1px 5px; border-radius:3px; white-space:nowrap; flex-shrink:0; }
@@ -998,14 +995,11 @@ const toolToMcp = {
   get_case_setup_requirements: 'emr',
   create_or_task: 'emr',
   reconcile_instruments: 'logistics',
-  inspect_scene_local: 'vlm',
-  inspect_scene_remote: 'vlm',
+  inspect_scene: 'vlm',
 };
 
 // Map tool names to dashboard node components for early activation
 const toolToNode = {
-  inspect_scene_remote: 'vlm_remote',
-  inspect_scene_local: 'vlm_local',
   get_surgical_pathway: 'emr_api',
   get_case_setup_requirements: 'emr_api',
   create_or_task: 'tasks',
@@ -1106,7 +1100,7 @@ function activateTool(ev) {
   activateNode('agent');
 
   // Activate right connector for external API calls
-  const externalTools = ['inspect_scene_remote', 'get_surgical_pathway', 'get_case_setup_requirements', 'create_or_task'];
+  const externalTools = ['inspect_scene', 'get_surgical_pathway', 'get_case_setup_requirements', 'create_or_task'];
   if (externalTools.includes(name)) {
     const cr = document.getElementById('conn-right');
     if (cr) {
@@ -1206,10 +1200,9 @@ function updateBody(comp, ev) {
     body.dataset.count = n;
     const taskIcons = {missing_supply:'📦', procedure_change_review:'🔄', human_review:'👁️', porter_hold:'🚏', porter_release:'🚏', specimen_handoff:'🧫'};
     const icon = taskIcons[ev.task_type] || '📋';
-    const pClass = ev.priority || 'normal';
     let entry = '<div class="task-entry" data-type="' + esc(ev.task_type || '') + '">';
     entry += '<span class="task-icon">' + icon + '</span>';
-    entry += '<span class="task-badge ' + pClass + '">' + esc(ev.priority || '?') + '</span> ';
+    entry += '<span class="task-badge">' + esc(ev.priority || '?') + '</span> ';
     entry += '<span class="task-type">' + esc(ev.task_type || '').replace(/_/g, ' ') + '</span>';
     if (ev.summary) entry += '<span class="task-summary">' + esc(ev.summary) + '</span>';
     entry += '</div>';
@@ -1241,10 +1234,9 @@ function updateBody(comp, ev) {
     const mIcon = methodIcons[method] || '👩‍⚕️';
     const methodLabel = methodLabels[method] || methodLabels.nurse;
     const methodClass = method;
-    const uClass = ev.urgency || 'normal';
     let entry = '<div class="task-entry" data-type="' + esc(methodClass) + '">';
     entry += '<span class="task-icon">' + mIcon + '</span>';
-    entry += '<span class="task-badge ' + uClass + '">' + esc(ev.urgency || '?') + '</span> ';
+    entry += '<span class="task-badge">' + esc(ev.urgency || '?') + '</span> ';
     entry += '<span class="task-type">' + esc(ev.item_name || '').replace(/_/g, ' ') + '</span> ';
     entry += '<span class="task-method ' + methodClass + '">' + methodLabel + '</span>';
     entry += '</div>';
@@ -1286,8 +1278,8 @@ function updateBody(comp, ev) {
     const errStr = errs.join(' ');
     const checkMap = {
       allowlist:   /not allowed/,
-      task_args:   /invalid task_type|invalid priority/,
-      spd_args:    /invalid urgency|missing item_name/,
+      task_args:   /invalid task_type/,
+      spd_args:    /missing item_name/,
       light_args:  /invalid light color|invalid duration/,
     };
     checks.forEach(li => {

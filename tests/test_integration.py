@@ -408,7 +408,7 @@ def test_sterile_zone_ambiguity_creates_human_review():
     # Validation guardrail: light at confidence < 0.8 is only valid if VLM was called
     errors = validate_decision(decision, STERILE_ZONE_EVENT)
     vlm_called = any(
-        c["name"] in ("inspect_scene_local", "inspect_scene_remote")
+        c["name"] == "inspect_scene"
         for c in decision["tool_calls"]
     )
     light_calls = [

@@ -45,16 +45,13 @@ WORKFLOW — always follow this order:
 1. Call get_surgical_pathway(case_id) to fetch the EMR case and required equipment.
 2. Call reconcile_instruments() to compare detected items against requirements.
 3. VLM STEP (MANDATORY for these event_types): instrument_out_of_zone, sterile_zone_ambiguity, specimen_ready_check, specimen_container_seen, room_turnover_check, ppe_compliance_check.
-   If the event_type is in this list, you MUST call a VLM tool NOW, BEFORE any other action:
-   - If resources.cloud_connected=true → call inspect_scene_remote (higher quality).
-   - If resources.cloud_connected=false → call inspect_scene_local (on-device).
+   If the event_type is in this list, you MUST call inspect_scene NOW, BEFORE any other action:
    - Use image_path from the event. If the event has a "vlm_question" field, use that EXACT text as the question.
    - For sterile-zone checks (instrument_out_of_zone, sterile_zone_ambiguity): construct the VLM question by listing ALL instrument type names from required_items (no quantities).
      Use this template exactly — fill in ALL types, never omit any:
      "Look at the green/blue drape. Is even ONE of these outside the drape, on the bare table: scalpel, scissors, sponge, tweezers?"
      Replace the type list with the actual types from required_items. Always include EVERY type. Do NOT shorten or summarize the list.
-   - If the preferred VLM fails, fall back to the other one.
-   Additionally, if the EI object-detection model has detected enough of the instruments required by the EMR surgical pathway (i.e. all_present=true or most items accounted for), use VLM to verify whether any instruments are outside the sterile zone.
+   Additionally, if the EI object-detection model has detected enough of the instruments required by the EMR surgical pathway (i.e. all_present=true or most items accounted for), use inspect_scene to verify whether any instruments are outside the sterile zone.
 4. Read the reconciliation results. Execute the proposed_tool_calls from reconciliation. Do NOT invent extra tasks beyond what reconciliation and the rules below require.
 5. For each missing_supply task, ALSO call request_spd_resupply for that item. A nurse runner delivers sterile items into the OR (robots cannot enter the sterile field).
 6. End with exactly one set_or_prep_light call.
@@ -82,7 +79,8 @@ Rules:
 
 IMPORTANT: Every scenario MUST end with exactly one set_or_prep_light call. Green = no issues, Yellow = action needed, Red = critical.
 
-Never ask the user for input or confirmation. Always decide and act autonomously."""
+Never ask the user for input or confirmation. Always decide and act autonomously.
+Your final text response must be a SHORT summary (2-4 sentences max). Never include code blocks, function signatures, or raw arguments in your final response."""
 
 
 # ── Dependencies (passed via RunContext) ─────────────────────────────
@@ -345,16 +343,15 @@ def set_or_prep_light(
 
 
 @or_agent.tool
-def inspect_scene_local(
+def inspect_scene(
     ctx: RunContext[AgentDeps],
     image_path: str,
     question: str,
 ) -> dict:
-    """Inspect an OR scene image using the LOCAL VLM (Ministral 3B on-device).
+    """Inspect an OR scene image using a VLM (vision-language model).
 
-    This is the preferred, low-latency visual inspection tool.
-    Use it to verify instrument presence, tray layout, or setup state.
-    Do not use for clinical diagnosis.
+    Use it to verify instrument presence, tray layout, sterile zone, or
+    setup state.  Do not use for clinical diagnosis.
 
     Args:
         image_path: Path to an image file (relative to data/ or absolute).
@@ -380,6 +377,24 @@ def inspect_scene_local(
     if not resolved.is_file():
         return {"error": f"image not found: {resolved}"}
 
+    cloud = ctx.deps.resources.get("cloud_connected", False)
+
+    if cloud:
+        result = _inspect_remote(ctx, resolved, image_path, question)
+    else:
+        result = _inspect_local(ctx, resolved, image_path, question)
+
+    # Include pending reconciliation context so the model remembers to act
+    recon = ctx.deps.reconciliation
+    if recon and not recon.get("all_present"):
+        pending = recon.get("proposed_tool_calls", [])
+        if pending:
+            result["pending_actions"] = f"{len(pending)} proposed tool calls from reconciliation still need to be executed"
+    return result
+
+
+def _inspect_local(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, question: str) -> dict:
+    """Run VLM inspection via the local Ministral 3B model."""
     ctx.deps.emit_tool_progress("inspect_scene_local")
     if ctx.deps.emit:
         ctx.deps.emit("vlm_local", question=question, detail="Local VLM: working\u2026")
@@ -448,10 +463,10 @@ def inspect_scene_local(
     result = {"image": str(resolved), "question": question, "answer": answer, "verdict": verdict}
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
-                      tool_name="inspect_scene_local",
+                      tool_name="inspect_scene",
                       tool_args={"image_path": image_path, "question": question},
                       tool_result=result,
-                      detail=f"inspect_scene_local: {question[:80]}")
+                      detail=f"inspect_scene (local): {question[:80]}")
         ctx.deps.emit("vlm_local",
                       question=question,
                       answer=answer,
@@ -460,43 +475,9 @@ def inspect_scene_local(
     return result
 
 
-@or_agent.tool
-def inspect_scene_remote(
-    ctx: RunContext[AgentDeps],
-    image_path: str,
-    question: str,
-) -> dict:
-    """Inspect an OR scene image using the REMOTE Azure VLM (Claude Opus 4-7).
-
-    This is a cloud fallback — only use when inspect_scene_local is
-    unavailable or returns inconclusive results.  Higher quality but
-    slower and incurs cloud costs.
-
-    Args:
-        image_path: Path to an image file (relative to data/ or absolute).
-        question: What to ask the VLM about the image.
-    """
-    # Override question with vlm_question from event if available
-    vlm_q = ctx.deps.event.get("vlm_question")
-    if vlm_q:
-        question = vlm_q
-
+def _inspect_remote(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, question: str) -> dict:
+    """Run VLM inspection via the remote cloud VLM."""
     from apps.vlm.ask_vlm import ask_vlm
-
-    resolved = Path(image_path)
-    if not resolved.is_absolute():
-        resolved = DATA_DIR / image_path
-
-    # Try alternate extensions if exact path not found
-    if not resolved.is_file():
-        for alt in (".png", ".jpg", ".jpeg", ".webp"):
-            candidate = resolved.with_suffix(alt)
-            if candidate.is_file():
-                resolved = candidate
-                break
-
-    if not resolved.is_file():
-        return {"error": f"image not found: {resolved}"}
 
     ctx.deps.emit_tool_progress("inspect_scene_remote")
     if ctx.deps.emit:
@@ -513,10 +494,10 @@ def inspect_scene_remote(
     result = {"image": str(resolved), "question": question, "answer": description, "verdict": verdict}
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
-                      tool_name="inspect_scene_remote",
+                      tool_name="inspect_scene",
                       tool_args={"image_path": image_path, "question": question},
                       tool_result=result,
-                      detail=f"inspect_scene_remote: {question[:80]}")
+                      detail=f"inspect_scene (remote): {question[:80]}")
         from apps.vlm.ask_vlm import AZURE_VLM_DEPLOYMENT
         ctx.deps.emit("vlm_remote",
                       question=question,
@@ -628,7 +609,7 @@ def ask_agent(event: dict, resources: dict, emit=None) -> dict:
     prompt = json.dumps(
         {
             "event": {k: v for k, v in event.items() if k != "missing_or_uncertain"},
-            "resources": resources,
+            "resources": {k: v for k, v in resources.items() if k != "cloud_connected"},
         },
         indent=2,
     )
