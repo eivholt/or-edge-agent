@@ -30,10 +30,11 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "local-dev-key")
 EMR_BASE_URL = "http://localhost:9000"
 
 VLM_SYSTEM_PROMPT = (
-    "You are a surgical-scene analyst. Answer the user's question about the "
-    "image. Respond ONLY with a JSON object — no markdown, no commentary:\n"
-    '{"answer": true/false, "description": "one or two sentences"}\n'
-    '"answer" is true when the answer to the question is YES, false when NO.'
+    "You are a surgical-scene analyst. Describe exactly what you see in the "
+    "image, then answer the user's question. Respond ONLY with JSON:\n"
+    '{"description": "one or two sentences", "answer": true/false}\n'
+    '"answer" is true when YES, false when NO. '
+    "Base your answer strictly on what is visible — do not guess or assume."
 )
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
@@ -43,15 +44,25 @@ You are a local OR logistics agent (synthetic demo). Coordinate supply, porter, 
 WORKFLOW — always follow this order:
 1. Call get_surgical_pathway(case_id) to fetch the EMR case and required equipment.
 2. Call reconcile_instruments() to compare detected items against requirements.
-3. Read the reconciliation results. Execute the proposed_tool_calls from reconciliation. Do NOT invent extra tasks beyond what reconciliation and the rules below require.
-4. For each missing_supply task, ALSO call request_spd_resupply for that item. A nurse runner delivers sterile items into the OR (robots cannot enter the sterile field).
-5. End with exactly one set_or_prep_light call.
+3. VLM STEP (MANDATORY for these event_types): instrument_out_of_zone, sterile_zone_ambiguity, specimen_ready_check, specimen_container_seen, room_turnover_check, ppe_compliance_check.
+   If the event_type is in this list, you MUST call a VLM tool NOW, BEFORE any other action:
+   - If resources.cloud_connected=true → call inspect_scene_remote (higher quality).
+   - If resources.cloud_connected=false → call inspect_scene_local (on-device).
+   - Use image_path from the event. If the event has a "vlm_question" field, use that EXACT text as the question.
+   - For sterile-zone checks (instrument_out_of_zone, sterile_zone_ambiguity): construct the VLM question by listing ALL instrument type names from required_items (no quantities).
+     Use this template exactly — fill in ALL types, never omit any:
+     "Look at the green/blue drape. Is even ONE of these outside the drape, on the bare table: scalpel, scissors, sponge, tweezers?"
+     Replace the type list with the actual types from required_items. Always include EVERY type. Do NOT shorten or summarize the list.
+   - If the preferred VLM fails, fall back to the other one.
+   Additionally, if the EI object-detection model has detected enough of the instruments required by the EMR surgical pathway (i.e. all_present=true or most items accounted for), use VLM to verify whether any instruments are outside the sterile zone.
+4. Read the reconciliation results. Execute the proposed_tool_calls from reconciliation. Do NOT invent extra tasks beyond what reconciliation and the rules below require.
+5. For each missing_supply task, ALSO call request_spd_resupply for that item. A nurse runner delivers sterile items into the OR (robots cannot enter the sterile field).
+6. End with exactly one set_or_prep_light call.
 
 Rules:
 
-- If proposed_tool_calls is empty [] and all_present=true → set_or_prep_light green, short summary. Nothing else.
+- If proposed_tool_calls is empty [] and all_present=true AND event_type is NOT in the VLM list above → set_or_prep_light green, short summary. Nothing else.
 - Items in flagged_no_deficit have NO deficit (visible >= required). NEVER create tasks for them.
-- confidence_level is "high" (>=0.80) or "low" (<0.80). The proposed calls already have the correct task_type.
 
 - proposed_tool_calls not empty → execute each proposed call exactly as given. Do not change task_type.
   For each missing_supply task, also call request_spd_resupply with the item name, room_id, and the SAME urgency as the task priority (e.g. task priority="normal" → SPD urgency="normal").
@@ -59,25 +70,17 @@ Rules:
 
 - visually_ready_but_pathway_changed → proposed_tool_calls includes procedure_change_review + porter_hold + yellow light. Execute all of them, plus any deficit tasks.
 
-- VLM events (confidence_level="low" or these event_types) → VLM inspection required:
-  - Check resources.cloud_connected to decide routing:
-    * If cloud_connected=true → call inspect_scene_remote (Claude Opus 4-7, higher quality).
-    * If cloud_connected=false → call inspect_scene_local (on-device Ministral 3B).
-  - Event-type actions:
+- VLM event-type actions (AFTER calling VLM in step 3):
     - instrument_out_of_zone → human_review + yellow light
+    - sterile_zone_ambiguity → human_review + yellow light
     - specimen_ready_check / specimen_container_seen → You MUST create EXACTLY TWO tasks:
-      1. create_synthetic_or_task with task_type="specimen_handoff" (nurse receives specimen for pathology)
-      2. create_synthetic_or_task with task_type="porter_hold" (porter picks up specimen and transports to pathology lab)
+      1. create_or_task with task_type="specimen_handoff" (nurse receives specimen for pathology)
+      2. create_or_task with task_type="porter_hold" (porter picks up specimen and transports to pathology lab)
       Then set yellow light.
-    - room_turnover_check → FIRST call VLM to detect leftover equipment from the previous case. Include the VLM findings in a porter_hold task summary. Then set red light.
-    - ppe_compliance_check → human_review + yellow light UNLESS VLM explicitly says YES (compliant)
-  If the event contains a "vlm_question" field, use that EXACT text as the question for the chosen VLM tool.
-  For ppe_compliance_check: if the VLM answer does NOT start with "YES", treat it as non-compliant and create human_review + yellow light.
-  If the preferred VLM fails, fall back to the other one.
+    - room_turnover_check → Include the VLM findings in a porter_hold task summary. Then set red light.
+    - ppe_compliance_check → human_review + yellow light UNLESS VLM verdict is true (compliant), then green light.
 
 IMPORTANT: Every scenario MUST end with exactly one set_or_prep_light call. Green = no issues, Yellow = action needed, Red = critical.
-
-Never actuate (set_or_prep_light) when confidence_level is "low" unless VLM has confirmed.
 
 Never ask the user for input or confirmation. Always decide and act autonomously."""
 
@@ -100,7 +103,7 @@ class AgentDeps:
             self._tools_used = []
 
     _tool_display_names = {
-        "create_synthetic_or_task": "create OR task",
+        "create_or_task": "create OR task",
         "set_or_prep_light": "set OR prep light",
     }
 
@@ -164,6 +167,7 @@ def get_surgical_pathway(
         ctx.deps.emit("emr_api",
                       case_id=case_id,
                       procedure=case.get("procedure", ""),
+                      required_items=case.get("required_items", {}),
                       detail=f"Fetched case {case_id}: {case.get('procedure', '?')}")
     return case
 
@@ -183,6 +187,8 @@ def reconcile_instruments(
     """
     event = ctx.deps.event
     case = ctx.deps.case
+    if case is None:
+        return {"error": "No case data — call get_surgical_pathway first."}
     recon = reconcile_setup(event, case)
     # Store on deps for prompt context
     ctx.deps.reconciliation = recon
@@ -210,7 +216,7 @@ def _reconcile_detail(recon: dict) -> str:
 
 
 @or_agent.tool
-def create_synthetic_or_task(
+def create_or_task(
     ctx: RunContext[AgentDeps],
     case_id: str,
     task_type: str,
@@ -240,13 +246,13 @@ def create_synthetic_or_task(
         "summary": summary,
         "reason": reason,
     }
-    ctx.deps.emit_tool_progress("create_synthetic_or_task")
+    ctx.deps.emit_tool_progress("create_or_task")
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
-                      tool_name="create_synthetic_or_task",
+                      tool_name="create_or_task",
                       tool_args={"case_id": case_id, "task_type": task_type, "priority": priority, "summary": summary},
                       tool_result=result,
-                      detail=f"create_synthetic_or_task(task_type={task_type})")
+                      detail=f"create_or_task(task_type={task_type})")
         ctx.deps.emit("tasks",
                       task_type=task_type,
                       priority=priority,
@@ -311,8 +317,7 @@ def set_or_prep_light(
     """Set the OR prep status light.
 
     Use green for logistics-ready, yellow for review-needed,
-    red only for high-confidence safety exceptions.
-    Never use below confidence 0.8.
+    red only for safety exceptions.
 
     Args:
         room_id: The OR room identifier.
@@ -391,10 +396,10 @@ def inspect_scene_local(
     guided_json = {
         "type": "object",
         "properties": {
-            "answer": {"type": "boolean"},
             "description": {"type": "string"},
+            "answer": {"type": "boolean"},
         },
-        "required": ["answer", "description"],
+        "required": ["description", "answer"],
         "additionalProperties": False,
     }
 
@@ -601,15 +606,7 @@ def reconcile_setup(event: dict, case: dict) -> dict:
 
     truly_clear = len(calls) == 0 and not actionable_missing and not unaccounted
 
-    # Categorical confidence label for LLM consumption
-    conf = event.get("confidence", 1.0)
-    if conf >= 0.80:
-        confidence_level = "high"
-    else:
-        confidence_level = "low"
-
     return {
-        "confidence_level": confidence_level,
         "actionable_missing": actionable_missing,
         "actionable_missing_detail": actionable_missing_detail,
         "flagged_no_deficit": flagged_no_deficit,
@@ -665,7 +662,7 @@ def ask_agent(event: dict, resources: dict, emit=None) -> dict:
     has_human_review = any(
         tc["arguments"].get("task_type") == "human_review"
         for tc in tool_calls
-        if tc["name"] == "create_synthetic_or_task"
+        if tc["name"] == "create_or_task"
     )
 
     # Count LLM iterations (each ModelResponse = one LLM round-trip)

@@ -80,7 +80,7 @@ def _task_types(decision):
     return [
         tc["arguments"].get("task_type")
         for tc in decision.get("tool_calls", [])
-        if tc["name"] == "create_synthetic_or_task"
+        if tc["name"] == "create_or_task"
     ]
 
 
@@ -117,7 +117,7 @@ class TestLevel1Basic:
             lights = _light_colors(d)
             if "green" not in lights:
                 errs.append("Expected green light when all present")
-            task_calls = [tc for tc in d["tool_calls"] if tc["name"] == "create_synthetic_or_task"]
+            task_calls = [tc for tc in d["tool_calls"] if tc["name"] == "create_or_task"]
             if task_calls:
                 errs.append(f"No tasks expected when all present, got {len(task_calls)}")
             return errs
@@ -143,7 +143,7 @@ class TestLevel1Basic:
                 errs.append("Expected missing_supply task for scissors")
             text = " ".join(
                 tc["arguments"].get("summary", "") + tc["arguments"].get("reason", "")
-                for tc in d["tool_calls"] if tc["name"] == "create_synthetic_or_task"
+                for tc in d["tool_calls"] if tc["name"] == "create_or_task"
             ).lower()
             if "scissors" not in text:
                 errs.append("Task should mention 'scissors'")
@@ -165,7 +165,7 @@ class TestLevel1Basic:
 
         def checks(d):
             errs = []
-            task_calls = [tc for tc in d["tool_calls"] if tc["name"] == "create_synthetic_or_task"]
+            task_calls = [tc for tc in d["tool_calls"] if tc["name"] == "create_or_task"]
             if task_calls:
                 errs.append(f"No tasks expected with surplus, got {len(task_calls)}")
             return errs
@@ -196,7 +196,7 @@ class TestLevel2Standard:
         def checks(d):
             errs = []
             supply = [tc for tc in d["tool_calls"]
-                      if tc["name"] == "create_synthetic_or_task"
+                      if tc["name"] == "create_or_task"
                       and tc["arguments"].get("task_type") == "missing_supply"]
             if len(supply) < 2:
                 errs.append(f"Expected ≥2 missing_supply tasks, got {len(supply)}")
@@ -227,7 +227,7 @@ class TestLevel2Standard:
         def checks(d):
             errs = []
             supply = [tc for tc in d["tool_calls"]
-                      if tc["name"] == "create_synthetic_or_task"]
+                      if tc["name"] == "create_or_task"]
             if len(supply) < 3:
                 errs.append(f"Expected ≥3 tasks for 3 deficits, got {len(supply)}")
             return errs
@@ -251,7 +251,7 @@ class TestLevel2Standard:
             recon = reconcile_setup(event, get_case("CASE-BENCH-2"))
             expected_unaccounted = len(recon["unaccounted"])
             tasks = [tc for tc in d["tool_calls"]
-                     if tc["name"] == "create_synthetic_or_task"]
+                     if tc["name"] == "create_or_task"]
             if len(tasks) < expected_unaccounted:
                 errs.append(
                     f"Expected ≥{expected_unaccounted} tasks for unaccounted items "
@@ -360,7 +360,7 @@ class TestLevel3Nuanced:
             errs = []
             # scalpel: need 1, have 2 — no deficit despite being flagged
             task_calls = [tc for tc in d["tool_calls"]
-                          if tc["name"] == "create_synthetic_or_task"]
+                          if tc["name"] == "create_or_task"]
             for tc in task_calls:
                 text = (tc["arguments"].get("summary", "") +
                         tc["arguments"].get("reason", "")).lower()
@@ -431,7 +431,7 @@ class TestLevel4Complex:
                 errs.append("Missing yellow light")
             # Plus supply tasks for deficits (scalpel need 3 have 2, scissors need 2 have 1, sponge need 6 have 4)
             supply = [tc for tc in d["tool_calls"]
-                      if tc["name"] == "create_synthetic_or_task"
+                      if tc["name"] == "create_or_task"
                       and tc["arguments"].get("task_type") in ("missing_supply", "human_review")]
             if len(supply) < 2:
                 errs.append(f"Expected ≥2 supply/review tasks for deficits, got {len(supply)}")
@@ -454,7 +454,7 @@ class TestLevel4Complex:
         def checks(d):
             errs = []
             tasks = [tc for tc in d["tool_calls"]
-                     if tc["name"] == "create_synthetic_or_task"]
+                     if tc["name"] == "create_or_task"]
             if not tasks:
                 errs.append("Expected tasks for missing items")
                 return errs
@@ -515,7 +515,7 @@ class TestLevel5Adversarial:
         def checks(d):
             errs = []
             tasks = [tc for tc in d["tool_calls"]
-                     if tc["name"] == "create_synthetic_or_task"]
+                     if tc["name"] == "create_or_task"]
             if tasks:
                 errs.append(
                     f"All counts exceed requirements — no tasks expected, got {len(tasks)}: "
@@ -541,7 +541,7 @@ class TestLevel5Adversarial:
         def checks(d):
             errs = []
             tasks = [tc for tc in d["tool_calls"]
-                     if tc["name"] == "create_synthetic_or_task"]
+                     if tc["name"] == "create_or_task"]
             text = " ".join(
                 tc["arguments"].get("summary", "") + " " + tc["arguments"].get("reason", "")
                 for tc in tasks
@@ -571,7 +571,7 @@ class TestLevel5Adversarial:
         def checks(d):
             errs = []
             tasks = [tc for tc in d["tool_calls"]
-                     if tc["name"] == "create_synthetic_or_task"]
+                     if tc["name"] == "create_or_task"]
             if len(tasks) < 4:
                 errs.append(
                     f"Empty table with 4 required items → ≥4 tasks, got {len(tasks)}"
@@ -595,7 +595,7 @@ class TestLevel5Adversarial:
         def checks(d):
             errs = []
             supply_tasks = [tc for tc in d["tool_calls"]
-                            if tc["name"] == "create_synthetic_or_task"
+                            if tc["name"] == "create_or_task"
                             and tc["arguments"].get("task_type") == "missing_supply"]
             spd = [tc for tc in d["tool_calls"]
                    if tc["name"] in ("request_spd_resupply", "request_spd_robot_delivery")]

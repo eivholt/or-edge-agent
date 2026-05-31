@@ -4,7 +4,6 @@
   "case_id": "CASE-2001",
   "event_type": "visually_ready_but_pathway_changed",
   "zone": "back_table",
-  "confidence": 0.91,
   "image_path": "frames/frame_procedure_changed.png",
   "timestamp": "2026-05-15T12:05:00+02:00"
 }

@@ -12,14 +12,14 @@ CASES = {
     "CASE-1042": {
         "case_id": "CASE-1042",
         "patient_id": "SYN-PAT-8842",
-        "procedure": "synthetic laparoscopic biopsy",
+        "procedure": "Laparoscopic Biopsy",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {
             "scalpel": 1,
             "scissors": 3,
-            "sponge": 2,
-            "tweezers": 4
+            "sponge": 6,
+            "tweezers": 2
         },
         "open_items": [
             "porter_not_released",
@@ -27,10 +27,25 @@ CASES = {
         ],
         "porter_release_allowed": False
     },
+    "CASE-1044": {
+        "case_id": "CASE-1044",
+        "patient_id": "SYN-PAT-8844",
+        "procedure": "Laparoscopic Biopsy",
+        "phase": "pre_op_setup",
+        "priority": "normal",
+        "required_items": {
+            "scalpel": 1,
+            "scissors": 2,
+            "sponge": 4,
+            "tweezers": 1
+        },
+        "open_items": [],
+        "porter_release_allowed": False
+    },
     "CASE-1043": {
         "case_id": "CASE-1043",
         "patient_id": "SYN-PAT-8843",
-        "procedure": "synthetic laparoscopic cholecystectomy",
+        "procedure": "Laparoscopic Cholecystectomy",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {
@@ -47,7 +62,7 @@ CASES = {
     "CASE-2001": {
         "case_id": "CASE-2001",
         "patient_id": "SYN-PAT-2001",
-        "procedure": "synthetic open conversion preparedness pathway",
+        "procedure": "Open Conversion Preparedness Pathway",
         "phase": "procedure_changed_after_setup",
         "priority": "high",
         "required_items": {
@@ -65,7 +80,7 @@ CASES = {
     "CASE-3001": {
         "case_id": "CASE-3001",
         "patient_id": "SYN-PAT-3001",
-        "procedure": "synthetic biopsy",
+        "procedure": "Biopsy",
         "phase": "case_closing_candidate",
         "priority": "normal",
         "required_items": {
@@ -82,7 +97,7 @@ CASES = {
     "CASE-INT-1": {
         "case_id": "CASE-INT-1",
         "patient_id": "SYN-PAT-INT1",
-        "procedure": "synthetic laparoscopic cholecystectomy",
+        "procedure": "Laparoscopic Cholecystectomy",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
@@ -92,7 +107,7 @@ CASES = {
     "CASE-INT-2": {
         "case_id": "CASE-INT-2",
         "patient_id": "SYN-PAT-INT2",
-        "procedure": "synthetic minor excision",
+        "procedure": "Minor Excision",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 1, "scissors": 1, "sponge": 2},
@@ -102,7 +117,7 @@ CASES = {
     "CASE-INT-3": {
         "case_id": "CASE-INT-3",
         "patient_id": "SYN-PAT-INT3",
-        "procedure": "synthetic wound closure",
+        "procedure": "Wound Closure",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 1, "scissors": 1},
@@ -112,7 +127,7 @@ CASES = {
     "CASE-INT-4": {
         "case_id": "CASE-INT-4",
         "patient_id": "SYN-PAT-INT4",
-        "procedure": "synthetic laparoscopic biopsy",
+        "procedure": "Laparoscopic Biopsy",
         "phase": "pre_op_setup",
         "priority": "high",
         "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
@@ -122,7 +137,7 @@ CASES = {
     "CASE-INT-6": {
         "case_id": "CASE-INT-6",
         "patient_id": "SYN-PAT-INT6",
-        "procedure": "synthetic biopsy",
+        "procedure": "Biopsy",
         "phase": "intra_op",
         "priority": "normal",
         "required_items": {"scissors": 1, "sponge": 2},
@@ -132,7 +147,7 @@ CASES = {
     "CASE-INT-7": {
         "case_id": "CASE-INT-7",
         "patient_id": "SYN-PAT-INT7",
-        "procedure": "synthetic appendectomy",
+        "procedure": "Appendectomy",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 2, "scissors": 2, "tweezers": 2},
@@ -142,7 +157,7 @@ CASES = {
     "CASE-INT-10": {
         "case_id": "CASE-INT-10",
         "patient_id": "SYN-PAT-INT10",
-        "procedure": "synthetic laparoscopic cholecystectomy (changed from appendectomy)",
+        "procedure": "Laparoscopic Cholecystectomy (Changed from Appendectomy)",
         "phase": "pre_op_setup",
         "priority": "high",
         "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
@@ -152,7 +167,7 @@ CASES = {
     "CASE-INT-11": {
         "case_id": "CASE-INT-11",
         "patient_id": "SYN-PAT-INT11",
-        "procedure": "synthetic minor excision",
+        "procedure": "Minor Excision",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 1, "scissors": 1},
@@ -162,7 +177,7 @@ CASES = {
     "CASE-INT-12": {
         "case_id": "CASE-INT-12",
         "patient_id": "SYN-PAT-INT12",
-        "procedure": "synthetic laparoscopic biopsy",
+        "procedure": "Laparoscopic Biopsy",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
@@ -173,7 +188,7 @@ CASES = {
     "CASE-A": {
         "case_id": "CASE-A",
         "patient_id": "SYN-PAT-A",
-        "procedure": "synthetic minor excision",
+        "procedure": "Minor Excision",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 1, "scissors": 1, "sponge": 2},
@@ -183,7 +198,7 @@ CASES = {
     "CASE-B": {
         "case_id": "CASE-B",
         "patient_id": "SYN-PAT-B",
-        "procedure": "synthetic laparoscopic biopsy",
+        "procedure": "Laparoscopic Biopsy",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
@@ -194,7 +209,7 @@ CASES = {
     "CASE-VLM": {
         "case_id": "CASE-VLM",
         "patient_id": "SYN-PAT-VLM",
-        "procedure": "synthetic minor excision",
+        "procedure": "Minor Excision",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 1, "scissors": 2},
@@ -205,7 +220,7 @@ CASES = {
     "CASE-4001": {
         "case_id": "CASE-4001",
         "patient_id": "SYN-PAT-4001",
-        "procedure": "synthetic laparoscopic cholecystectomy (turnover pending)",
+        "procedure": "Laparoscopic Cholecystectomy (Turnover Pending)",
         "phase": "room_turnover",
         "priority": "normal",
         "required_items": {
@@ -220,7 +235,7 @@ CASES = {
     "CASE-5001": {
         "case_id": "CASE-5001",
         "patient_id": "SYN-PAT-5001",
-        "procedure": "synthetic laparoscopic biopsy",
+        "procedure": "Laparoscopic Biopsy",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {
@@ -236,7 +251,7 @@ CASES = {
     "CASE-BENCH-1": {
         "case_id": "CASE-BENCH-1",
         "patient_id": "SYN-PAT-BENCH1",
-        "procedure": "synthetic minor excision",
+        "procedure": "Minor Excision",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 1, "scissors": 1, "sponge": 2},
@@ -246,7 +261,7 @@ CASES = {
     "CASE-BENCH-2": {
         "case_id": "CASE-BENCH-2",
         "patient_id": "SYN-PAT-BENCH2",
-        "procedure": "synthetic laparoscopic cholecystectomy",
+        "procedure": "Laparoscopic Cholecystectomy",
         "phase": "pre_op_setup",
         "priority": "normal",
         "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},
@@ -256,7 +271,7 @@ CASES = {
     "CASE-BENCH-3": {
         "case_id": "CASE-BENCH-3",
         "patient_id": "SYN-PAT-BENCH3",
-        "procedure": "synthetic biopsy",
+        "procedure": "Biopsy",
         "phase": "case_closing_candidate",
         "priority": "normal",
         "required_items": {"scissors": 1, "sponge": 2},
@@ -267,7 +282,7 @@ CASES = {
     "CASE-BENCH-4": {
         "case_id": "CASE-BENCH-4",
         "patient_id": "SYN-PAT-BENCH4",
-        "procedure": "synthetic open conversion (changed from laparoscopic appendectomy)",
+        "procedure": "Open Conversion (Changed from Laparoscopic Appendectomy)",
         "phase": "procedure_changed_after_setup",
         "priority": "high",
         "required_items": {"scalpel": 3, "scissors": 2, "sponge": 6, "tweezers": 2},
@@ -277,7 +292,7 @@ CASES = {
     "CASE-BENCH-5": {
         "case_id": "CASE-BENCH-5",
         "patient_id": "SYN-PAT-BENCH5",
-        "procedure": "synthetic laparoscopic biopsy",
+        "procedure": "Laparoscopic Biopsy",
         "phase": "pre_op_setup",
         "priority": "high",
         "required_items": {"scalpel": 2, "scissors": 2, "sponge": 4, "tweezers": 2},

@@ -4,9 +4,7 @@
   "case_id": "CASE-1042",
   "event_type": "instrument_out_of_zone",
   "zone": "back_table",
-  "confidence": 0.72,
   "image_path": "frames/frame_instrument_out_of_zone.png",
-  "vlm_question": "Are all sponges, tweezers, scalpels, and scissors COMPLETELY inside the sterile zone? Ignore any other disposed or non-tracked items.",
   "timestamp": "2026-05-16T09:15:00+02:00",
   "vlm_hint": "A scalpel appears to have been placed outside the sterile drape boundary."
 }

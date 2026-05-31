@@ -44,11 +44,8 @@ def reconcile(event: dict, case: dict) -> list[dict]:
 
     missing = set(event.get("missing_or_uncertain", []))
 
-    # Confidence-based task_type: low confidence or sterile ambiguity → human_review
-    confidence = event.get("confidence", 1.0)
     event_type = event.get("event_type", "")
-    low_confidence = confidence < 0.80 or event_type == "sterile_zone_ambiguity"
-    flagged_task_type = "human_review" if low_confidence else "missing_supply"
+    flagged_task_type = "human_review" if event_type == "sterile_zone_ambiguity" else "missing_supply"
 
     calls: list[dict] = []
 
@@ -61,7 +58,7 @@ def reconcile(event: dict, case: dict) -> list[dict]:
             deficit = max(0, need - have)
             if deficit > 0:
                 calls.append({
-                    "name": "create_synthetic_or_task",
+                    "name": "create_or_task",
                     "arguments": {
                         "case_id": case["case_id"],
                         "task_type": flagged_task_type,
@@ -80,7 +77,7 @@ def reconcile(event: dict, case: dict) -> list[dict]:
         elif have < need:
             # Not flagged, but count is short.
             calls.append({
-                "name": "create_synthetic_or_task",
+                "name": "create_or_task",
                 "arguments": {
                     "case_id": case["case_id"],
                     "task_type": "missing_supply",
@@ -100,7 +97,7 @@ def reconcile(event: dict, case: dict) -> list[dict]:
     # Per protocol: ALL THREE actions are required.
     if event.get("event_type") == "visually_ready_but_pathway_changed":
         calls.append({
-            "name": "create_synthetic_or_task",
+            "name": "create_or_task",
             "arguments": {
                 "case_id": case["case_id"],
                 "task_type": "procedure_change_review",
@@ -110,7 +107,7 @@ def reconcile(event: dict, case: dict) -> list[dict]:
             },
         })
         calls.append({
-            "name": "create_synthetic_or_task",
+            "name": "create_or_task",
             "arguments": {
                 "case_id": case["case_id"],
                 "task_type": "porter_hold",

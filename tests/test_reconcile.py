@@ -53,7 +53,7 @@ def test_missing_supply_when_count_deficit():
     calls = reconcile(EVENT, CASE_B)
     assert len(calls) == 1
     call = calls[0]
-    assert call["name"] == "create_synthetic_or_task"
+    assert call["name"] == "create_or_task"
     assert call["arguments"]["task_type"] == "missing_supply"
     assert "tweezers" in call["arguments"]["summary"]
     assert "need 4" in call["arguments"]["summary"]
@@ -183,7 +183,7 @@ def test_procedure_change_produces_review_call():
     }
     calls = reconcile(event, case)
     assert len(calls) == 3
-    task_calls = [c for c in calls if c["name"] == "create_synthetic_or_task"]
+    task_calls = [c for c in calls if c["name"] == "create_or_task"]
     light_calls = [c for c in calls if c["name"] == "set_or_prep_light"]
     task_types = [c["arguments"]["task_type"] for c in task_calls]
     assert "procedure_change_review" in task_types
@@ -212,7 +212,7 @@ def test_procedure_change_with_deficit():
         "required_items": {"scalpel": 2, "scissors": 2, "tweezers": 2},
     }
     calls = reconcile(event, case)
-    task_calls = [c for c in calls if c["name"] == "create_synthetic_or_task"]
+    task_calls = [c for c in calls if c["name"] == "create_or_task"]
     types = [c["arguments"]["task_type"] for c in task_calls]
     assert "missing_supply" in types, "Should flag deficits as missing_supply"
     assert "procedure_change_review" in types, "Should include procedure_change_review"

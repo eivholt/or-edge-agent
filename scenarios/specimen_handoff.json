@@ -4,7 +4,6 @@
   "case_id": "CASE-3001",
   "event_type": "specimen_container_seen",
   "zone": "back_table",
-  "confidence": 0.93,
   "image_path": "frames/frame_specimen_handoff.png",
   "timestamp": "2026-05-15T12:10:00+02:00"
 }

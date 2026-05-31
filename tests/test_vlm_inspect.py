@@ -70,7 +70,7 @@ def test_agent_handles_uncertain_event_with_missing_required():
     # Agent should have created at least one task for scissors
     task_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
     ]
     assert len(task_calls) >= 1, (
         f"Agent should create a task for missing scissors, got: {decision}"

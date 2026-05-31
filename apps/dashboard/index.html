@@ -683,7 +683,6 @@
                 <li data-check="task_args">Task args</li>
                 <li data-check="spd_args">SPD args</li>
                 <li data-check="light_args">Light args</li>
-                <li data-check="confidence">Confidence</li>
               </ul>
             </div>
           </div>
@@ -758,16 +757,16 @@
   <div class="sidebar">
     <div class="toggle-row">
       <div class="toggle-switch">
-        <input type="checkbox" id="offlineToggle">
+        <input type="checkbox" id="offlineToggle" checked>
         <span class="toggle-slider"></span>
       </div>
       <label for="offlineToggle">Simulate offline (no cloud)</label>
-      <span class="offline-badge online" id="offlineBadge">online</span>
+      <span class="offline-badge offline" id="offlineBadge">offline</span>
     </div>
     <h2>Quick Scenarios <button class="reset-btn" onclick="resetPipeline()" title="Reset dashboard">⟳</button></h2>
     <div class="scenario-bar">
       <button class="scenario-btn" onclick="runScenario('missing_scissors')">Missing Scissors</button>
-      <button class="scenario-btn" onclick="runScenario('missing_suction_tip')">Missing Suction Tip</button>
+      <button class="scenario-btn" onclick="runScenario('missing_something')">Missing Instrument</button>
       <button class="scenario-btn" onclick="runScenario('all_present')">All Present</button>
       <button class="scenario-btn" onclick="runScenario('procedure_changed')">Procedure Changed</button>
       <button class="scenario-btn" onclick="runScenario('specimen_handoff')">Specimen Handoff</button>
@@ -997,7 +996,7 @@ const toolToMcp = {
   request_spd_resupply: 'logistics',
   get_surgical_pathway: 'emr',
   get_case_setup_requirements: 'emr',
-  create_synthetic_or_task: 'emr',
+  create_or_task: 'emr',
   reconcile_instruments: 'logistics',
   inspect_scene_local: 'vlm',
   inspect_scene_remote: 'vlm',
@@ -1009,7 +1008,7 @@ const toolToNode = {
   inspect_scene_local: 'vlm_local',
   get_surgical_pathway: 'emr_api',
   get_case_setup_requirements: 'emr_api',
-  create_synthetic_or_task: 'tasks',
+  create_or_task: 'tasks',
   request_spd_resupply: 'spd',
   reconcile_instruments: 'reconcile',
 };
@@ -1107,7 +1106,7 @@ function activateTool(ev) {
   activateNode('agent');
 
   // Activate right connector for external API calls
-  const externalTools = ['inspect_scene_remote', 'get_surgical_pathway', 'get_case_setup_requirements', 'create_synthetic_or_task'];
+  const externalTools = ['inspect_scene_remote', 'get_surgical_pathway', 'get_case_setup_requirements', 'create_or_task'];
   if (externalTools.includes(name)) {
     const cr = document.getElementById('conn-right');
     if (cr) {
@@ -1170,7 +1169,6 @@ function updateBody(comp, ev) {
     let html = '';
     if (ev.event_type) html += 'Type: <code>' + esc(ev.event_type) + '</code><br>';
     const meta = [];
-    if (ev.confidence != null) meta.push('Confidence: <code>' + ev.confidence + '</code>');
     if (ev.inference_ms != null) meta.push('Inference: <code>' + ev.inference_ms.toFixed(0) + ' ms</code>');
     if (meta.length) html += meta.join(' · ') + '<br>';
     if (ev.detected_labels && ev.detected_labels.length) {
@@ -1291,7 +1289,6 @@ function updateBody(comp, ev) {
       task_args:   /invalid task_type|invalid priority/,
       spd_args:    /invalid urgency|missing item_name/,
       light_args:  /invalid light color|invalid duration/,
-      confidence:  /cannot actuate below/,
     };
     checks.forEach(li => {
       const key = li.dataset.check;
@@ -1311,6 +1308,10 @@ function updateBody(comp, ev) {
     let html = '';
     if (ev.case_id) html += 'Case: <code>' + esc(ev.case_id) + '</code><br>';
     if (ev.procedure) html += esc(ev.procedure);
+    if (ev.required_items && typeof ev.required_items === 'object') {
+      const items = Object.entries(ev.required_items).map(function(e) { return e[0] + ': ' + e[1]; }).join(', ');
+      html += '<br>Required: <code>' + esc(items) + '</code>';
+    }
     body.innerHTML = html || esc(detail) || 'Active';
   } else {
     body.textContent = detail || 'Active';
@@ -1334,7 +1335,8 @@ function setLight(color, reason) {
 }
 
 function addLog(ev) {
-  const time = ev.timestamp ? new Date(ev.timestamp).toLocaleTimeString() : new Date().toLocaleTimeString();
+  const _d = ev.timestamp ? new Date(ev.timestamp) : new Date();
+  const time = String(_d.getHours()).padStart(2,'0') + ':' + String(_d.getMinutes()).padStart(2,'0') + ':' + String(_d.getSeconds()).padStart(2,'0') + '.' + String(_d.getMilliseconds()).padStart(3,'0');
   const detail = ev.detail || ev.summary || JSON.stringify(ev).slice(0, 200);
   const color = componentColors[ev.component] || '#71717a';
   const compName = formatComponent(ev.component);
@@ -1411,11 +1413,10 @@ function renderMd(s) {
 // ── Offline toggle ───────────────────────────────────
 const offlineToggle = document.getElementById('offlineToggle');
 const offlineBadge = document.getElementById('offlineBadge');
-offlineToggle.addEventListener('change', () => {
+function applyOfflineState() {
   const off = offlineToggle.checked;
   offlineBadge.textContent = off ? 'offline' : 'online';
   offlineBadge.className = 'offline-badge ' + (off ? 'offline' : 'online');
-  // Fade remote VLM node
   const remoteNode = document.getElementById('node-vlm_remote');
   if (remoteNode) {
     remoteNode.classList.toggle('node-offline', off);
@@ -1426,7 +1427,9 @@ offlineToggle.addEventListener('change', () => {
       if (vt) vt.style.display = 'none';
     }
   }
-});
+}
+offlineToggle.addEventListener('change', applyOfflineState);
+applyOfflineState();
 
 // ── Quick Scenario Runner ───────────────────────────
 async function runScenario(name) {

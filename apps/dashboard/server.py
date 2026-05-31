@@ -218,6 +218,7 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
             if candidate.exists():
                 frame = candidate
                 image_url = f"/data/frames/frame_{scenario_name}{ext}"
+                event["image_path"] = f"frames/frame_{scenario_name}{ext}"
                 break
     if frame is None:
         # Fallback: use first available image
@@ -255,15 +256,14 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
 
     _emit("detector",
           event_type=event.get("event_type"),
-          confidence=event.get("confidence"),
           visible_items=visible,
           missing_items=event.get("missing_or_uncertain", []) if not detected_labels else [],
           image_url=image_url,
           detection_image_url=detection_image_url,
           inference_ms=inference_ms,
           detected_labels=detected_labels,
-          detail=f"Detected {total_visible} items, "
-                 f"{len(event.get('missing_or_uncertain', []))} uncertain")
+          detail=f"Detected {len(detected_labels) if detected_labels else total_visible} items"
+                 + (f", {len(event.get('missing_or_uncertain', []))} uncertain" if not detected_labels and event.get('missing_or_uncertain') else ""))
 
     # 2. Resources (static context for the agent)
     resources = {

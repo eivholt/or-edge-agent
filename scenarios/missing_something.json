@@ -4,7 +4,6 @@
   "case_id": "CASE-1042",
   "event_type": "or_setup_state_change",
   "zone": "back_table",
-  "confidence": 0.82,
-  "image_path": "frames/frame_missing_suction_tip.png",
+  "image_path": "frames/frame_missing_something.png",
   "timestamp": "2026-05-15T12:05:00+02:00"
 }

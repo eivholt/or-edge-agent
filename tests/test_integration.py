@@ -66,7 +66,7 @@ def test_multiple_missing_required_items():
 
     supply_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
         and c["arguments"].get("task_type") == "missing_supply"
     ]
     assert len(supply_calls) >= 2, (
@@ -113,7 +113,7 @@ def test_all_present_fast_path():
 
     task_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
     ]
     assert task_calls == [], (
         f"No tasks should be created when everything is present: {task_calls}"
@@ -152,7 +152,7 @@ def test_missing_items_not_required_no_task():
 
     task_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
     ]
     assert task_calls == [], (
         f"No tasks should be created for items not in required_items: {task_calls}"
@@ -192,7 +192,7 @@ def test_mixed_missing_only_required_get_tasks():
 
     supply_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
         and c["arguments"].get("task_type") == "missing_supply"
     ]
     assert len(supply_calls) >= 2, (
@@ -257,7 +257,7 @@ def test_specimen_event_all_present():
 
     task_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
     ]
     assert task_calls == [], (
         f"All items present for specimen event, no tasks expected: {task_calls}"
@@ -296,7 +296,7 @@ def test_unaccounted_items_get_tasks():
 
     supply_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
     ]
     assert len(supply_calls) >= 2, (
         f"Agent should create tasks for scissors and tweezers, "
@@ -336,7 +336,7 @@ def test_procedure_changed_creates_review_and_hold():
     task_types = [
         c["arguments"].get("task_type")
         for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
     ]
     assert "procedure_change_review" in task_types, (
         f"Should create procedure_change_review task, got: {task_types}"
@@ -387,7 +387,7 @@ def test_sterile_zone_ambiguity_creates_human_review():
 
     task_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
     ]
     assert len(task_calls) >= 1, (
         f"Should create at least one task for scissors, got: {decision}"
@@ -446,7 +446,7 @@ def test_dynamic_tool_swap_robot_delivery():
     )
 
     @robot_agent.tool
-    def create_synthetic_or_task(
+    def create_or_task(
         ctx: RunContext[AgentDeps],
         case_id: str,
         task_type: str,

@@ -43,7 +43,7 @@ async def get_case_setup_requirements(case_id: str) -> dict:
 
 
 @mcp.tool()
-async def create_synthetic_or_task(
+async def create_or_task(
     case_id: str,
     task_type: str,
     priority: str,

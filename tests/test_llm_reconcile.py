@@ -44,7 +44,7 @@ def test_no_escalation_when_pathway_does_not_need_item():
     task_types = [
         c["arguments"].get("task_type")
         for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
     ]
     assert "missing_supply" not in task_types, (
         f"LLM should not create a missing_supply task when tweezers is "
@@ -73,7 +73,7 @@ def test_missing_supply_when_pathway_requires_item():
 
     supply_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_synthetic_or_task"
+        if c["name"] == "create_or_task"
         and c["arguments"].get("task_type") == "missing_supply"
     ]
     assert len(supply_calls) >= 1, (

@@ -16,9 +16,7 @@ import os
 import time
 from pathlib import Path
 
-import anthropic
 from dotenv import load_dotenv
-from openai import AzureOpenAI
 
 load_dotenv(override=True)
 
@@ -38,32 +36,47 @@ LOCAL_VLM_API_KEY = os.getenv("OPENAI_API_KEY", "local-dev-key")
 LOCAL_VLM_ALIAS = "ministral-3b-local"
 
 # Ground truth for scored scenarios (YES or NO)
+# The question framing determines the expected answer:
+#   "Are any X outside the drape?" → YES means instruments ARE outside
 GROUND_TRUTH = {
-    "instrument_out_of_zone": "YES",
-    "ppe_compliance_check": "NO",
-    "room_turnover_check": "NO",       # room is NOT clear
-    "specimen_handoff": "YES",           # specimen container IS visible
-    "specimen_ready_check": "YES",
-    "sterile_zone_ambiguity": "NO",      # instruments are NOT all within boundary
+    "all_present": "NO",                   # all instruments are ON the drape
+    "instrument_out_of_zone": "YES",      # instruments are outside the drape
+    "missing_scissors": "NO",             # all instruments are ON the drape
+    "missing_something": "NO",             # all instruments are ON the drape
+    "ppe_compliance_check": "NO",          # person is NOT wearing a mask
+    "procedure_changed": "NO",            # all instruments are ON the drape
+    "room_turnover_check": "NO",           # room is NOT clear
+    "specimen_handoff": "YES",             # specimen container IS visible
+    "specimen_ready_check": "YES",         # specimen container IS visible
+    "sterile_zone_ambiguity": "YES",       # instruments ARE outside the drape
 }
 
 SYSTEM_PROMPT = (
-    "You are a surgical‑scene analyst. Answer the user's question about the "
-    "image. Respond ONLY with a JSON object — no markdown, no commentary:\n"
-    '{"answer": true/false, "description": "one or two sentences"}\n'
-    '"answer" is true when the answer to the question is YES, false when NO.'
+    "You are a surgical-scene analyst. Describe exactly what you see in the "
+    "image, then answer the user's question. Respond ONLY with JSON:\n"
+    '{"description": "one or two sentences", "answer": true/false}\n'
+    '"answer" is true when YES, false when NO. '
+    "Base your answer strictly on what is visible — do not guess or assume."
+)
+
+# Sterile-zone question used for all instrument-tray scenarios
+_STERILE_ZONE_Q = (
+    "Look at the green drape. Is even ONE of these outside the drape, "
+    "on the bare table: scalpel, scissors, sponge, tweezers?"
 )
 
 # Default questions for event types that don't have vlm_question
 DEFAULT_QUESTIONS = {
-    "instrument_out_of_zone": (
-        "Is any surgical instrument placed outside the sterile drape boundary?"
-    ),
+    "all_present": _STERILE_ZONE_Q,
+    "instrument_out_of_zone": _STERILE_ZONE_Q,
+    "missing_scissors": _STERILE_ZONE_Q,
+    "missing_something": _STERILE_ZONE_Q,
+    "or_setup_state_change": _STERILE_ZONE_Q,
+    "procedure_changed": _STERILE_ZONE_Q,
+    "sterile_zone_ambiguity": _STERILE_ZONE_Q,
+    "visually_ready_but_pathway_changed": _STERILE_ZONE_Q,
     "specimen_ready_check": (
         "Is a specimen container visible near the mayo stand?"
-    ),
-    "sterile_zone_ambiguity": (
-        "Are all instruments within the sterile field boundary?"
     ),
     "specimen_container_seen": (
         "Is a specimen container visible on the back table?"
@@ -81,11 +94,13 @@ def load_vlm_scenarios() -> list[dict]:
     """Load all scenarios that involve VLM inspection."""
     vlm_event_types = {
         "instrument_out_of_zone",
+        "or_setup_state_change",
         "specimen_ready_check",
         "room_turnover_check",
         "ppe_compliance_check",
         "sterile_zone_ambiguity",
         "specimen_container_seen",
+        "visually_ready_but_pathway_changed",
     }
     scenarios = []
     for f in sorted(SCENARIOS_DIR.glob("*.json")):
@@ -95,7 +110,7 @@ def load_vlm_scenarios() -> list[dict]:
         low_conf = data.get("confidence", 1.0) < 0.80
         if has_vlm_q or event_type in vlm_event_types or low_conf:
             # Resolve question
-            question = data.get("vlm_question") or DEFAULT_QUESTIONS.get(event_type, "Describe what you see in this image.")
+            question = data.get("vlm_question") or DEFAULT_QUESTIONS.get(f.stem) or DEFAULT_QUESTIONS.get(event_type, "Describe what you see in this image.")
             # Resolve image
             img_rel = data.get("image_path", "")
             img_path = DATA_DIR / img_rel
@@ -149,6 +164,7 @@ def _is_local(deployment: str) -> bool:
 
 def ask_claude(deployment: str, image_path: Path, question: str) -> tuple[str, float]:
     """Call Azure-hosted Anthropic model. Returns (answer, latency_ms)."""
+    import anthropic
     client = anthropic.Anthropic(
         base_url=AZURE_ANTHROPIC_ENDPOINT,
         api_key=AZURE_API_KEY,
@@ -197,7 +213,7 @@ def ask_local(image_path: Path, question: str) -> tuple[str, float]:
                 "type": "json_schema",
                 "json_schema": {
                     "name": "vlm_response",
-                    "schema": {"type": "object", "properties": {"answer": {"type": "boolean"}, "description": {"type": "string"}}, "required": ["answer", "description"], "additionalProperties": False},
+                    "schema": {"type": "object", "properties": {"description": {"type": "string"}, "answer": {"type": "boolean"}}, "required": ["description", "answer"], "additionalProperties": False},
                     "strict": True,
                 },
             },
@@ -215,6 +231,7 @@ def ask_model(deployment: str, image_path: Path, question: str) -> tuple[str, fl
         return ask_local(image_path, question)
     if _is_claude(deployment):
         return ask_claude(deployment, image_path, question)
+    from openai import AzureOpenAI
     client = AzureOpenAI(
         azure_endpoint=AZURE_ENDPOINT,
         api_key=AZURE_API_KEY,

@@ -1,10 +1,9 @@
 {
   "event_id": "evt-0010",
   "room_id": "OR-2",
-  "case_id": "CASE-1042",
+  "case_id": "CASE-1044",
   "event_type": "or_setup_state_change",
   "zone": "back_table",
-  "confidence": 0.95,
   "image_path": "frames/frame_all_present.png",
   "timestamp": "2026-05-15T12:00:00+02:00"
 }
