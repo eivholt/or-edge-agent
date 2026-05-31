@@ -11,18 +11,16 @@ class ORSceneEvent(BaseModel):
     event_type: Literal[
         "or_setup_state_change",
         "visually_ready_but_pathway_changed",
-        "specimen_container_seen",
         "sterile_zone_ambiguity",
         "instrument_out_of_zone",
         "wrong_case_cart_candidate",
-        "specimen_ready_check",
         "room_turnover_check",
         "ppe_compliance_check",
     ]
     visible_items: dict[str, int] = Field(default_factory=dict)
     missing_or_uncertain: list[str] = Field(default_factory=list)
     zone: str
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     image_path: str | None = None
     vlm_hint: str | None = None
     timestamp: datetime

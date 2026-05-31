@@ -28,6 +28,7 @@ EVENT = {
     "zone": "back_table",
     "confidence": 0.88,
     "timestamp": "2026-05-15T08:00:00+02:00",
+    "image_path": "frames/frame_all_present.png",
 }
 
 RESOURCES = get_resources("OR-2")
@@ -35,29 +36,26 @@ RESOURCES = get_resources("OR-2")
 
 @pytest.mark.llm
 def test_no_escalation_when_pathway_does_not_need_item():
-    """Case A: tweezers flagged uncertain but not required → no missing_supply task."""
+    """Case A: tweezers flagged uncertain but not required → no task or resupply."""
     event_a = dict(EVENT, case_id="CASE-A")
     decision = ask_agent(event_a, RESOURCES)
     errors = validate_decision(decision, event_a)
     assert not errors, f"Validation errors: {errors}"
 
-    task_types = [
-        c["arguments"].get("task_type")
-        for c in decision["tool_calls"]
-        if c["name"] == "create_or_task"
+    resupply_calls = [
+        c for c in decision["tool_calls"]
+        if c["name"] in ("request_resupply", "request_spd_resupply")
     ]
-    assert "missing_supply" not in task_types, (
-        f"LLM should not create a missing_supply task when tweezers is "
+    assert not resupply_calls, (
+        f"LLM should not request resupply when tweezers is "
         f"not required by the pathway, got: {decision}"
     )
 
 
 @pytest.mark.llm
-def test_missing_supply_when_pathway_requires_item():
-    """Case B: tweezers flagged and required (need 2, have 3 but flagged) → no deficit actually.
-    But CASE-B requires tweezers:2, event shows tweezers:3 → count is sufficient.
-    Let's use a different event with a real deficit."""
-    # Override event to have tweezers deficit
+def test_resupply_when_pathway_requires_item():
+    """Case B: scissors deficit → agent should call request_resupply."""
+    # Override event to have scissors deficit
     event_with_deficit = dict(EVENT, case_id="CASE-B")
     event_with_deficit["visible_items"] = {
         "scalpel": 2,
@@ -71,16 +69,16 @@ def test_missing_supply_when_pathway_requires_item():
     errors = validate_decision(decision, event_with_deficit)
     assert not errors, f"Validation errors: {errors}"
 
-    supply_calls = [
+    resupply_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_or_task"
-        and c["arguments"].get("task_type") == "missing_supply"
+        if c["name"] in ("request_resupply", "request_spd_resupply")
     ]
-    assert len(supply_calls) >= 1, (
-        f"LLM should create a missing_supply task for scissors deficit, got: {decision}"
+    assert len(resupply_calls) >= 1, (
+        f"LLM should request resupply for scissors deficit, got: {decision}"
     )
-    summaries = " ".join(c["arguments"].get("summary", "") for c in supply_calls)
-    normalized = summaries.lower()
-    assert "scissors" in normalized, (
-        f"missing_supply task should mention scissors, got: {summaries}"
+    all_args = " ".join(
+        str(c["arguments"]) for c in resupply_calls
+    ).lower()
+    assert "scissors" in all_args, (
+        f"Resupply call should mention scissors, got: {all_args}"
     )

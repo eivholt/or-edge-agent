@@ -46,8 +46,6 @@ GROUND_TRUTH = {
     "ppe_compliance_check": "NO",          # person is NOT wearing a mask
     "procedure_changed": "NO",            # all instruments are ON the drape
     "room_turnover_check": "NO",           # room is NOT clear
-    "specimen_handoff": "YES",             # specimen container IS visible
-    "specimen_ready_check": "YES",         # specimen container IS visible
     "sterile_zone_ambiguity": "YES",       # instruments ARE outside the drape
 }
 
@@ -75,12 +73,6 @@ DEFAULT_QUESTIONS = {
     "procedure_changed": _STERILE_ZONE_Q,
     "sterile_zone_ambiguity": _STERILE_ZONE_Q,
     "visually_ready_but_pathway_changed": _STERILE_ZONE_Q,
-    "specimen_ready_check": (
-        "Is a specimen container visible near the mayo stand?"
-    ),
-    "specimen_container_seen": (
-        "Is a specimen container visible on the back table?"
-    ),
 }
 
 
@@ -95,11 +87,9 @@ def load_vlm_scenarios() -> list[dict]:
     vlm_event_types = {
         "instrument_out_of_zone",
         "or_setup_state_change",
-        "specimen_ready_check",
         "room_turnover_check",
         "ppe_compliance_check",
         "sterile_zone_ambiguity",
-        "specimen_container_seen",
         "visually_ready_but_pathway_changed",
     }
     scenarios = []

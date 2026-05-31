@@ -60,26 +60,6 @@
     "ministral-3b-local_correct": true
   },
   {
-    "scenario": "specimen_handoff",
-    "event_type": "specimen_container_seen",
-    "question": "Is a specimen container visible on the back table?",
-    "ministral-3b-local_answer": "{\"description\": \"A specimen container with a label indicating it holds synthetic tissue (OR-3) and is designated for lab use only, placed in a metal tray with a biohazard symbol is visible on the back table.\", \"answer\": true}",
-    "ministral-3b-local_ms": 339,
-    "ground_truth": "YES",
-    "ministral-3b-local_verdict": "YES",
-    "ministral-3b-local_correct": true
-  },
-  {
-    "scenario": "specimen_ready_check",
-    "event_type": "specimen_ready_check",
-    "question": "Is a specimen container visible near the mayo stand?",
-    "ministral-3b-local_answer": "{\"description\": \"A stainless steel mayo stand holds surgical instruments (a pair of curved scissors) and gauze pads. On top of the stand is a clear plastic specimen container with a lid.\",\n\"answer\": true}",
-    "ministral-3b-local_ms": 385,
-    "ground_truth": "YES",
-    "ministral-3b-local_verdict": "YES",
-    "ministral-3b-local_correct": true
-  },
-  {
     "scenario": "sterile_zone_ambiguity",
     "event_type": "sterile_zone_ambiguity",
     "question": "Look at the green drape. Is even ONE of these outside the drape, on the bare table: scalpel, scissors, sponge, tweezers?",

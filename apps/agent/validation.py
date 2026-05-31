@@ -10,7 +10,6 @@ ALLOWED_TOOLS = {
 }
 
 ALLOWED_TASK_TYPES = {
-    "missing_supply",
     "human_review",
 }
 

@@ -49,22 +49,20 @@ def test_no_escalation_when_counts_sufficient():
 
 
 def test_missing_supply_when_count_deficit():
-    """Case B: need 4 tweezers but only 3 visible → missing_supply task."""
-    calls = reconcile(EVENT, CASE_B)
-    assert len(calls) == 1
-    call = calls[0]
-    assert call["name"] == "create_or_task"
-    assert call["arguments"]["task_type"] == "missing_supply"
-    assert "tweezers" in call["arguments"]["summary"]
-    assert "need 4" in call["arguments"]["summary"]
-    assert "have 3" in call["arguments"]["summary"]
+    """Case B: need 4 tweezers but only 3 visible → deficit."""
+    deficits = reconcile(EVENT, CASE_B)
+    assert len(deficits) == 1
+    d = deficits[0]
+    assert d["item"] == "tweezers"
+    assert d["have"] == 3
+    assert d["need"] == 4
 
 
 # ── Quantity deficit tests ───────────────────────────────────────────
 
 
 def test_multiple_deficits():
-    """Multiple items below required count → one task per deficit."""
+    """Multiple items below required count → one deficit per item."""
     event = {
         "event_id": "evt-qd",
         "room_id": "OR-2",
@@ -82,15 +80,15 @@ def test_multiple_deficits():
         "priority": "normal",
         "required_items": {"scalpel": 2, "scissors": 2},
     }
-    calls = reconcile(event, case)
-    assert len(calls) == 2
-    items = [c["arguments"]["summary"] for c in calls]
-    assert any("scalpel" in s for s in items)
-    assert any("scissors" in s for s in items)
+    deficits = reconcile(event, case)
+    assert len(deficits) == 2
+    items = [d["item"] for d in deficits]
+    assert "scalpel" in items
+    assert "scissors" in items
 
 
 def test_flagged_uncertain_with_deficit():
-    """Item flagged uncertain AND count is short → missing_supply."""
+    """Item flagged uncertain AND count is short → deficit."""
     event = {
         "event_id": "evt-fu",
         "room_id": "OR-2",
@@ -108,9 +106,9 @@ def test_flagged_uncertain_with_deficit():
         "priority": "normal",
         "required_items": {"scalpel": 2, "scissors": 2},
     }
-    calls = reconcile(event, case)
-    assert len(calls) == 1
-    assert "scissors" in calls[0]["arguments"]["summary"]
+    deficits = reconcile(event, case)
+    assert len(deficits) == 1
+    assert deficits[0]["item"] == "scissors"
 
 
 def test_flagged_uncertain_but_count_sufficient():
@@ -163,7 +161,8 @@ def test_item_not_required_no_task():
 
 
 def test_procedure_change_produces_review_call():
-    """visually_ready_but_pathway_changed → procedure_change_review task."""
+    """visually_ready_but_pathway_changed — reconcile only returns deficits.
+    No deficits here since all counts meet requirements."""
     event = {
         "event_id": "evt-pc",
         "room_id": "OR-2",
@@ -181,19 +180,12 @@ def test_procedure_change_produces_review_call():
         "priority": "high",
         "required_items": {"scalpel": 2, "scissors": 2, "tweezers": 2},
     }
-    calls = reconcile(event, case)
-    assert len(calls) == 3
-    task_calls = [c for c in calls if c["name"] == "create_or_task"]
-    light_calls = [c for c in calls if c["name"] == "set_or_prep_light"]
-    task_types = [c["arguments"]["task_type"] for c in task_calls]
-    assert "procedure_change_review" in task_types
-    assert "porter_hold" in task_types
-    assert len(light_calls) == 1
-    assert light_calls[0]["arguments"]["color"] == "yellow"
+    deficits = reconcile(event, case)
+    assert deficits == [], f"No deficits expected when counts match: {deficits}"
 
 
 def test_procedure_change_with_deficit():
-    """Pathway changed AND items below count → both deficit + procedure_change_review."""
+    """Pathway changed AND items below count → deficits returned."""
     event = {
         "event_id": "evt-pc2",
         "room_id": "OR-2",
@@ -211,12 +203,8 @@ def test_procedure_change_with_deficit():
         "priority": "high",
         "required_items": {"scalpel": 2, "scissors": 2, "tweezers": 2},
     }
-    calls = reconcile(event, case)
-    task_calls = [c for c in calls if c["name"] == "create_or_task"]
-    types = [c["arguments"]["task_type"] for c in task_calls]
-    assert "missing_supply" in types, "Should flag deficits as missing_supply"
-    assert "procedure_change_review" in types, "Should include procedure_change_review"
-    assert "porter_hold" in types, "Should include porter_hold"
-    light_calls = [c for c in calls if c["name"] == "set_or_prep_light"]
-    assert len(light_calls) == 1
-    assert light_calls[0]["arguments"]["color"] == "yellow"
+    deficits = reconcile(event, case)
+    items = [d["item"] for d in deficits]
+    assert "scalpel" in items, "scalpel deficit (need 2, have 1)"
+    assert "scissors" in items, "scissors deficit (need 2, have 0)"
+    assert "tweezers" in items, "tweezers deficit (need 2, have 0)"

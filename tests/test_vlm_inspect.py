@@ -50,39 +50,36 @@ EVENT_UNCERTAIN = {
     "zone": "back_table",
     "confidence": 0.82,
     "timestamp": "2026-05-15T09:00:00+02:00",
-    "image_path": IMAGE_PATH,
+    "image_path": "frames/frame_missing_scissors.png",
 }
 
 
 @pytest.mark.llm
 def test_agent_handles_uncertain_event_with_missing_required():
-    """Agent should create a task for scissors (missing + required).
+    """Agent should request resupply for scissors (missing + required).
 
     The agent receives a low-confidence event with scissors uncertain.
     Scissors IS required by the pathway, so reconciliation flags it.
     The agent may optionally call inspect_scene to verify, then should
-    create a missing_supply or human_review task.
+    request resupply or create a human_review task.
     """
     decision = ask_agent(EVENT_UNCERTAIN, RESOURCES)
     errors = validate_decision(decision, EVENT_UNCERTAIN)
     assert not errors, f"Validation errors: {errors}"
 
-    # Agent should have created at least one task for scissors
-    task_calls = [
+    # Agent should have requested resupply for scissors
+    resupply_calls = [
         c for c in decision["tool_calls"]
-        if c["name"] == "create_or_task"
+        if c["name"] in ("request_resupply", "request_spd_resupply")
     ]
-    assert len(task_calls) >= 1, (
-        f"Agent should create a task for missing scissors, got: {decision}"
+    assert len(resupply_calls) >= 1, (
+        f"Agent should request resupply for missing scissors, got: {decision}"
     )
 
-    # Check the task references scissors
-    all_summaries = " ".join(
-        c["arguments"].get("summary", "") + " " + c["arguments"].get("reason", "")
-        for c in task_calls
-    ).lower()
-    assert "scissor" in all_summaries, (
-        f"Task should reference scissors, got: {all_summaries}"
+    # Check the resupply references scissors
+    all_args = " ".join(str(c["arguments"]) for c in resupply_calls).lower()
+    assert "scissor" in all_args, (
+        f"Resupply should reference scissors, got: {all_args}"
     )
 
 

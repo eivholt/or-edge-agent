@@ -6,8 +6,7 @@ from pathlib import Path
 def main():
     scenario_paths = [
         "scenarios/missing_scissors.json",
-        "scenarios/procedure_changed.json",
-        "scenarios/specimen_handoff.json"
+        "scenarios/procedure_changed.json"
     ]
 
     Path("logs").mkdir(exist_ok=True)

@@ -34,6 +34,8 @@ VLM_SYSTEM_PROMPT = (
     "image, then answer the user's question. Respond ONLY with JSON:\n"
     '{"description": "one or two sentences", "answer": true/false}\n'
     '"answer" is true when YES, false when NO. '
+    "If any instrument is touching, overlapping, or extending past the drape "
+    "edge, that counts as outside the sterile zone — answer true. "
     "Base your answer strictly on what is visible — do not guess or assume."
 )
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
@@ -45,14 +47,17 @@ WORKFLOW — always follow this order:
 1. Call get_case(case_id) to fetch the EMR case and required equipment.
 2. Call check_supplies() to compare detected items against requirements.
 3. Call inspect_scene to verify the sterile zone.
-   Use image_path from the event. Ask the VLM whether ANY instrument is outside the sterile drape.
+   The image_path MUST be taken from the event's "image_path" field — do NOT invent a path.
 4. Call set_stacklight:
-   - yellow if ANY supply deficit was found OR the sterile zone has an issue.
-   - green if all supplies are present AND the sterile zone is clear.
+   - red if the sterile zone has an issue (verdict=true from inspect_scene).
+   - yellow if ANY supply deficit was found, or the case has pending tasks / procedure change.
+   - green if all supplies are present, no pending tasks, AND the sterile zone is clear.
 5. If there were deficits from step 2:
-   - For EACH deficit item, call create_task with task_type="missing_supply".
-   - For EACH deficit item, call request_resupply for that item.
-6. If inspect_scene found a sterile zone issue, call create_task with task_type="human_review".
+   - For EACH deficit item, call request_resupply.
+6. If the case has pending tasks or a procedure change, call create_task with task_type="human_review".
+7. Check inspect_scene's "verdict" field:
+   - verdict=true → sterile zone issue confirmed → call create_task with task_type="human_review".
+   - verdict=false → sterile zone is clear → do NOT create a human_review task for sterile reasons.
 
 IMPORTANT: Every run MUST include exactly one set_stacklight call.
 Never ask the user for input. Always decide and act autonomously.
@@ -205,7 +210,7 @@ def create_task(
 
     Args:
         case_id: The case identifier.
-        task_type: One of missing_supply, human_review.
+        task_type: One of human_review.
         priority: One of low, normal, high.
         summary: Short description of what is missing or needs review.
         reason: Why this task is being created.
@@ -278,11 +283,11 @@ def set_stacklight(
 ) -> dict:
     """Set the OR prep status stacklight.
 
-    Green = logistics-ready, Yellow = review-needed.
+    Green = logistics-ready, Yellow = supply deficit, Red = sterile contamination.
 
     Args:
         room_id: The OR room identifier.
-        color: One of green, yellow.
+        color: One of green, yellow, red.
         reason: Short explanation of why this color was chosen.
     """
     result = {
@@ -305,28 +310,34 @@ def set_stacklight(
     return result
 
 
+STERILE_ZONE_QUESTION = (
+    "Are any sponge, scissors, tweezers, scalpel in any part outside the sterile drape boundary?"
+)
+
+
 @or_agent.tool
 def inspect_scene(
     ctx: RunContext[AgentDeps],
     image_path: str,
-    question: str,
 ) -> dict:
-    """Inspect an OR scene image using a VLM (vision-language model).
+    """Inspect the OR scene image for sterile zone violations.
 
-    Use it to verify instrument presence, tray layout, sterile zone, or
-    setup state.  Do not use for clinical diagnosis.
+    Sends the image to a VLM with a fixed sterile-zone question that covers
+    all Edge Impulse instrument classes (sponge, scissors, tweezers, scalpel).
+
+    Returns a dict with:
+      - "answer": text description from the VLM
+      - "verdict": boolean — true means YES there IS an issue, false means NO issue found
+
+    IMPORTANT — check the "verdict" field in the result:
+      verdict=true  → sterile zone issue exists → create human_review task
+      verdict=false → sterile zone is clear → do NOT create a human_review task
 
     Args:
         image_path: Path to an image file (relative to data/ or absolute).
-        question: What to ask the VLM about the image.
     """
-    # Enrich question with known instrument types from the case
-    case = ctx.deps.case
-    if case and case.get("required_items"):
-        items = list(case["required_items"].keys())
-        item_list = ", ".join(items)
-        if item_list.lower() not in question.lower():
-            question = f"{question} The instrument types to look for: {item_list}."
+
+    question = STERILE_ZONE_QUESTION
 
     resolved = Path(image_path)
     if not resolved.is_absolute():
@@ -498,18 +509,30 @@ def reconcile_setup(event: dict, case: dict) -> dict:
     deficits = reconcile(event, case)
     all_present = len(deficits) == 0
 
-    if all_present:
+    # Check if the case has unresolved open items or a procedure change
+    open_items = case.get("open_items", [])
+    phase = case.get("phase", "")
+    needs_review = bool(open_items) or "changed" in phase
+
+    pending = [item.replace("_", " ") for item in open_items]
+
+    if all_present and not needs_review:
         summary = "All instrument types match or exceed requirements."
-        recommended_light = "green"
+    elif all_present and needs_review:
+        summary = (
+            "All instrument types match or exceed requirements, "
+            f"but case has pending tasks requiring review: {', '.join(pending)}. "
+            "Create human_review task."
+        )
     else:
         parts = [f"{d['item']} ({d['have']}/{d['need']})" for d in deficits]
-        summary = f"{len(deficits)} deficit(s): {', '.join(parts)}. Create missing_supply task and request_resupply for each."
-        recommended_light = "yellow"
+        summary = f"{len(deficits)} deficit(s): {', '.join(parts)}. Request resupply for each."
+        if needs_review:
+            summary += f" Pending tasks also require review: {', '.join(pending)}."
 
     return {
         "all_present": all_present,
         "deficits": deficits,
-        "recommended_light": recommended_light,
         "summary": summary,
     }
 

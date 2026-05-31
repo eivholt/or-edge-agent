@@ -22,9 +22,23 @@ CASES = {
             "tweezers": 2
         },
         "open_items": [
-            "porter_not_released",
-            "pathology_handoff_task_not_created"
+            "porter_not_released"
         ],
+        "porter_release_allowed": False
+    },
+    "CASE-1045": {
+        "case_id": "CASE-1045",
+        "patient_id": "SYN-PAT-8845",
+        "procedure": "Laparoscopic Cholecystectomy",
+        "phase": "pre_op_setup",
+        "priority": "normal",
+        "required_items": {
+            "tweezers": 2,
+            "scalpel": 2,
+            "sponge": 3,
+            "scissors": 1
+        },
+        "open_items": [],
         "porter_release_allowed": False
     },
     "CASE-1044": {
@@ -77,22 +91,7 @@ CASES = {
         ],
         "porter_release_allowed": False
     },
-    "CASE-3001": {
-        "case_id": "CASE-3001",
-        "patient_id": "SYN-PAT-3001",
-        "procedure": "Biopsy",
-        "phase": "case_closing_candidate",
-        "priority": "normal",
-        "required_items": {
-            "scissors": 1,
-            "sponge": 2
-        },
-        "open_items": [
-            "pathology_handoff_task_not_created"
-        ],
-        "expected_specimen": True,
-        "specimen_destination": "synthetic_pathology"
-    },
+
     # ── Integration-test cases ───────────────────────────────────────
     "CASE-INT-1": {
         "case_id": "CASE-INT-1",
@@ -268,17 +267,6 @@ CASES = {
         "open_items": [],
         "porter_release_allowed": False,
     },
-    "CASE-BENCH-3": {
-        "case_id": "CASE-BENCH-3",
-        "patient_id": "SYN-PAT-BENCH3",
-        "procedure": "Biopsy",
-        "phase": "case_closing_candidate",
-        "priority": "normal",
-        "required_items": {"scissors": 1, "sponge": 2},
-        "open_items": ["pathology_handoff_task_not_created"],
-        "expected_specimen": True,
-        "specimen_destination": "synthetic_pathology",
-    },
     "CASE-BENCH-4": {
         "case_id": "CASE-BENCH-4",
         "patient_id": "SYN-PAT-BENCH4",
@@ -311,7 +299,6 @@ class TaskCreate(BaseModel):
         "human_review",
         "porter_hold",
         "porter_release",
-        "specimen_handoff",
         "wrong_case_cart",
         "procedure_change_review"
     ]

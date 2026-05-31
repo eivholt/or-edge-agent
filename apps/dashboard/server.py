@@ -85,7 +85,7 @@ async def list_cases():
     import httpx
     try:
         # The EMR API doesn't have a list endpoint, so we use known case IDs
-        case_ids = ["CASE-1042", "CASE-2001", "CASE-3001", "CASE-4001", "CASE-5001"]
+        case_ids = ["CASE-1042", "CASE-2001", "CASE-4001", "CASE-5001"]
         cases = []
         async with httpx.AsyncClient() as client:
             for cid in case_ids:
@@ -244,8 +244,8 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
         cache_bust = int(time.time() * 1000)
         image_url = f"{image_url}?t={cache_bust}"
 
-    # Use scenario-provided visible_items if set (simulates intended deficit),
-    # otherwise fall back to actual EI model detections for reconciliation.
+    # Populate visible_items from actual EI model detections for reconciliation.
+    # Scenario JSON may override this if it provides its own visible_items.
     if "visible_items" not in event and detected_labels:
         from collections import Counter
         detected_counts = dict(Counter(detected_labels))

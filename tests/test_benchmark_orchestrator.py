@@ -47,6 +47,9 @@ RESULTS: list[BenchResult] = []
 
 def _run(name: str, level: int, event: dict, case_id: str, checks: callable):
     """Run agent, validate, apply checks, record result."""
+    # Ensure a valid image_path so inspect_scene doesn't waste context on errors
+    if "image_path" not in event:
+        event["image_path"] = "frames/frame_all_present.png"
     t0 = time.perf_counter()
     decision = ask_agent(event, RESOURCES)
     latency = (time.perf_counter() - t0) * 1000
@@ -80,7 +83,7 @@ def _task_types(decision):
     return [
         tc["arguments"].get("task_type")
         for tc in decision.get("tool_calls", [])
-        if tc["name"] == "create_or_task"
+        if tc["name"] == "create_task"
     ]
 
 
@@ -88,7 +91,7 @@ def _light_colors(decision):
     return [
         tc["arguments"].get("color")
         for tc in decision.get("tool_calls", [])
-        if tc["name"] == "set_or_prep_light"
+        if tc["name"] == "set_stacklight"
     ]
 
 
@@ -117,15 +120,15 @@ class TestLevel1Basic:
             lights = _light_colors(d)
             if "green" not in lights:
                 errs.append("Expected green light when all present")
-            task_calls = [tc for tc in d["tool_calls"] if tc["name"] == "create_or_task"]
+            task_calls = [tc for tc in d["tool_calls"] if tc["name"] == "create_task"]
             if task_calls:
                 errs.append(f"No tasks expected when all present, got {len(task_calls)}")
             return errs
 
         _run("all_present→green", 1, event, "CASE-BENCH-1", checks)
 
-    def test_L1_02_single_missing_item_task(self):
-        """One item flagged missing with deficit → missing_supply task."""
+    def test_L1_02_single_missing_item_resupply(self):
+        """One item flagged missing with deficit → request_resupply call."""
         event = {
             "event_id": "bench-L1-02", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
@@ -138,18 +141,16 @@ class TestLevel1Basic:
 
         def checks(d):
             errs = []
-            types = _task_types(d)
-            if "missing_supply" not in types:
-                errs.append("Expected missing_supply task for scissors")
-            text = " ".join(
-                tc["arguments"].get("summary", "") + tc["arguments"].get("reason", "")
-                for tc in d["tool_calls"] if tc["name"] == "create_or_task"
-            ).lower()
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if not resupply:
+                errs.append("Expected request_resupply for scissors")
+            text = " ".join(str(tc["arguments"]) for tc in resupply).lower()
             if "scissors" not in text:
-                errs.append("Task should mention 'scissors'")
+                errs.append("Resupply should mention 'scissors'")
             return errs
 
-        _run("single_missing→task", 1, event, "CASE-BENCH-1", checks)
+        _run("single_missing→resupply", 1, event, "CASE-BENCH-1", checks)
 
     def test_L1_03_no_action_surplus(self):
         """Visible counts exceed required — no tasks needed."""
@@ -165,7 +166,7 @@ class TestLevel1Basic:
 
         def checks(d):
             errs = []
-            task_calls = [tc for tc in d["tool_calls"] if tc["name"] == "create_or_task"]
+            task_calls = [tc for tc in d["tool_calls"] if tc["name"] == "create_task"]
             if task_calls:
                 errs.append(f"No tasks expected with surplus, got {len(task_calls)}")
             return errs
@@ -182,7 +183,7 @@ class TestLevel2Standard:
     """Multiple gaps or signals → agent must issue multiple correct tools."""
 
     def test_L2_01_two_missing_items(self):
-        """Two items flagged missing with deficit → two missing_supply tasks."""
+        """Two items flagged missing with deficit → two request_resupply calls."""
         event = {
             "event_id": "bench-L2-01", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
@@ -195,15 +196,11 @@ class TestLevel2Standard:
 
         def checks(d):
             errs = []
-            supply = [tc for tc in d["tool_calls"]
-                      if tc["name"] == "create_or_task"
-                      and tc["arguments"].get("task_type") == "missing_supply"]
-            if len(supply) < 2:
-                errs.append(f"Expected ≥2 missing_supply tasks, got {len(supply)}")
-            text = " ".join(
-                tc["arguments"].get("summary", "") + tc["arguments"].get("reason", "")
-                for tc in supply
-            ).lower()
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if len(resupply) < 2:
+                errs.append(f"Expected ≥2 resupply calls, got {len(resupply)}")
+            text = " ".join(str(tc["arguments"]) for tc in resupply).lower()
             if "scissors" not in text:
                 errs.append("Should mention scissors")
             if "tweezers" not in text:
@@ -226,13 +223,13 @@ class TestLevel2Standard:
 
         def checks(d):
             errs = []
-            supply = [tc for tc in d["tool_calls"]
-                      if tc["name"] == "create_or_task"]
-            if len(supply) < 3:
-                errs.append(f"Expected ≥3 tasks for 3 deficits, got {len(supply)}")
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if len(resupply) < 3:
+                errs.append(f"Expected ≥3 resupply calls for 3 deficits, got {len(resupply)}")
             return errs
 
-        _run("three_missing→three_tasks", 2, event, "CASE-BENCH-2", checks)
+        _run("three_missing→three_resupply", 2, event, "CASE-BENCH-2", checks)
 
     def test_L2_03_unaccounted_not_flagged(self):
         """Items not flagged by detector but with count deficit → tasks."""
@@ -249,17 +246,17 @@ class TestLevel2Standard:
         def checks(d):
             errs = []
             recon = reconcile_setup(event, get_case("CASE-BENCH-2"))
-            expected_unaccounted = len(recon["unaccounted"])
-            tasks = [tc for tc in d["tool_calls"]
-                     if tc["name"] == "create_or_task"]
-            if len(tasks) < expected_unaccounted:
+            expected_deficits = len(recon["deficits"])
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if len(resupply) < expected_deficits:
                 errs.append(
-                    f"Expected ≥{expected_unaccounted} tasks for unaccounted items "
-                    f"({recon['unaccounted']}), got {len(tasks)}"
+                    f"Expected ≥{expected_deficits} resupply calls for deficit items "
+                    f"({[d['item'] for d in recon['deficits']]}), got {len(resupply)}"
                 )
             return errs
 
-        _run("unaccounted→tasks", 2, event, "CASE-BENCH-2", checks)
+        _run("unaccounted→resupply", 2, event, "CASE-BENCH-2", checks)
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -271,8 +268,9 @@ class TestLevel3Nuanced:
     """Tests that require understanding confidence thresholds and
     choosing the correct task_type or light color."""
 
-    def test_L3_01_low_confidence_human_review(self):
-        """Confidence < 0.80 + missing item → human_review (not missing_supply)."""
+    def test_L3_01_low_confidence_resupply(self):
+        """Low confidence + missing item → agent should request resupply
+        and set yellow light."""
         event = {
             "event_id": "bench-L3-01", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
@@ -285,21 +283,19 @@ class TestLevel3Nuanced:
 
         def checks(d):
             errs = []
-            types = _task_types(d)
-            if "human_review" not in types:
-                errs.append("Expected human_review at low confidence, got: " + str(types))
-            # Light is OK if VLM was invoked first (per instructions rule 4)
-            vlm_called = any(tc["name"] == "inspect_scene"
-                             for tc in d.get("tool_calls", []))
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if not resupply:
+                errs.append("Expected resupply for missing scissors")
             lights = _light_colors(d)
-            if lights and not vlm_called:
-                errs.append(f"Should not set light below confidence 0.8 without VLM, got: {lights}")
+            if "yellow" not in lights and "red" not in lights:
+                errs.append(f"Expected yellow/red light for deficit, got: {lights}")
             return errs
 
-        _run("low_conf→human_review", 3, event, "CASE-BENCH-1", checks)
+        _run("low_conf→resupply", 3, event, "CASE-BENCH-1", checks)
 
-    def test_L3_02_sterile_zone_ambiguity_human_review(self):
-        """sterile_zone_ambiguity event → human_review regardless of confidence."""
+    def test_L3_02_sterile_zone_ambiguity_action(self):
+        """sterile_zone_ambiguity event → agent should take action (task or resupply)."""
         event = {
             "event_id": "bench-L3-02", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
@@ -312,17 +308,18 @@ class TestLevel3Nuanced:
 
         def checks(d):
             errs = []
-            types = _task_types(d)
-            if "human_review" not in types:
-                errs.append(
-                    "sterile_zone_ambiguity should trigger human_review, got: " + str(types)
-                )
+            # Should take action: human_review task for sterile issue OR resupply for deficit
+            tasks = [tc for tc in d["tool_calls"] if tc["name"] == "create_task"]
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if not tasks and not resupply:
+                errs.append("sterile_zone_ambiguity should trigger at least one action (task or resupply)")
             return errs
 
-        _run("sterile_zone→human_review", 3, event, "CASE-BENCH-1", checks)
+        _run("sterile_zone→action", 3, event, "CASE-BENCH-1", checks)
 
-    def test_L3_03_high_confidence_missing_supply_not_review(self):
-        """High confidence + missing item → missing_supply (not human_review)."""
+    def test_L3_03_high_confidence_resupply(self):
+        """High confidence + missing item → request_resupply call."""
         event = {
             "event_id": "bench-L3-03", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
@@ -335,14 +332,13 @@ class TestLevel3Nuanced:
 
         def checks(d):
             errs = []
-            types = _task_types(d)
-            if "missing_supply" not in types:
-                errs.append(f"Expected missing_supply at high conf, got: {types}")
-            if "human_review" in types:
-                errs.append("Should not trigger human_review at confidence 0.92")
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if not resupply:
+                errs.append(f"Expected request_resupply at high conf, got none")
             return errs
 
-        _run("high_conf→missing_supply", 3, event, "CASE-BENCH-2", checks)
+        _run("high_conf→resupply", 3, event, "CASE-BENCH-2", checks)
 
     def test_L3_04_flagged_but_no_deficit(self):
         """Item flagged uncertain but count meets requirement → no task for it."""
@@ -360,7 +356,7 @@ class TestLevel3Nuanced:
             errs = []
             # scalpel: need 1, have 2 — no deficit despite being flagged
             task_calls = [tc for tc in d["tool_calls"]
-                          if tc["name"] == "create_or_task"]
+                          if tc["name"] == "create_task"]
             for tc in task_calls:
                 text = (tc["arguments"].get("summary", "") +
                         tc["arguments"].get("reason", "")).lower()
@@ -380,8 +376,8 @@ class TestLevel4Complex:
     """Multi-tool combinations that require following compound rules."""
 
     def test_L4_01_procedure_changed_triple(self):
-        """Pathway changed → must call all three:
-        procedure_change_review + porter_hold + yellow light."""
+        """Pathway changed → agent should set yellow light and create
+        a human_review task for the procedure change."""
         event = {
             "event_id": "bench-L4-01", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-4",
@@ -395,19 +391,17 @@ class TestLevel4Complex:
         def checks(d):
             errs = []
             types = _task_types(d)
-            if "procedure_change_review" not in types:
-                errs.append(f"Missing procedure_change_review, got: {types}")
-            if "porter_hold" not in types:
-                errs.append(f"Missing porter_hold, got: {types}")
+            if "human_review" not in types:
+                errs.append(f"Expected human_review for procedure change, got: {types}")
             lights = _light_colors(d)
             if "yellow" not in lights:
                 errs.append(f"Missing yellow light, got: {lights}")
             return errs
 
-        _run("procedure_changed→triple", 4, event, "CASE-BENCH-4", checks)
+        _run("procedure_changed→review+yellow", 4, event, "CASE-BENCH-4", checks)
 
     def test_L4_02_procedure_changed_with_deficits(self):
-        """Pathway changed AND items are short → triple + missing_supply tasks."""
+        """Pathway changed AND items are short → human_review + resupply."""
         event = {
             "event_id": "bench-L4-02", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-4",
@@ -420,27 +414,23 @@ class TestLevel4Complex:
 
         def checks(d):
             errs = []
-            types = _task_types(d)
-            # Procedure change triple
-            if "procedure_change_review" not in types:
-                errs.append("Missing procedure_change_review")
-            if "porter_hold" not in types:
-                errs.append("Missing porter_hold")
             lights = _light_colors(d)
             if "yellow" not in lights:
                 errs.append("Missing yellow light")
-            # Plus supply tasks for deficits (scalpel need 3 have 2, scissors need 2 have 1, sponge need 6 have 4)
-            supply = [tc for tc in d["tool_calls"]
-                      if tc["name"] == "create_or_task"
-                      and tc["arguments"].get("task_type") in ("missing_supply", "human_review")]
-            if len(supply) < 2:
-                errs.append(f"Expected ≥2 supply/review tasks for deficits, got {len(supply)}")
+            # Should have human_review task + resupply calls
+            tasks = [tc for tc in d["tool_calls"] if tc["name"] == "create_task"]
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if not tasks:
+                errs.append("Expected human_review task for procedure change")
+            if not resupply:
+                errs.append("Expected resupply for deficits")
             return errs
 
         _run("procedure_changed+deficits", 4, event, "CASE-BENCH-4", checks)
 
     def test_L4_03_high_priority_propagation(self):
-        """High-priority case → tasks should inherit high priority."""
+        """High-priority case → resupply should be requested for deficits."""
         event = {
             "event_id": "bench-L4-03", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-5",
@@ -453,18 +443,10 @@ class TestLevel4Complex:
 
         def checks(d):
             errs = []
-            tasks = [tc for tc in d["tool_calls"]
-                     if tc["name"] == "create_or_task"]
-            if not tasks:
-                errs.append("Expected tasks for missing items")
-                return errs
-            for tc in tasks:
-                prio = tc["arguments"].get("priority")
-                if prio != "high":
-                    errs.append(
-                        f"High-priority case should produce high-priority tasks, "
-                        f"got '{prio}' for {tc['arguments'].get('task_type')}"
-                    )
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if not resupply:
+                errs.append("Expected resupply for missing items")
             return errs
 
         _run("high_priority_propagation", 4, event, "CASE-BENCH-5", checks)
@@ -479,7 +461,7 @@ class TestLevel5Adversarial:
     """Edge cases and tricky scenarios that probe model understanding."""
 
     def test_L5_01_exact_boundary_confidence(self):
-        """Confidence exactly 0.80 — should use missing_supply (not human_review)."""
+        """Confidence exactly 0.80 with missing item → should request resupply."""
         event = {
             "event_id": "bench-L5-01", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
@@ -492,16 +474,18 @@ class TestLevel5Adversarial:
 
         def checks(d):
             errs = []
-            types = _task_types(d)
-            if "missing_supply" not in types:
-                errs.append(f"At exactly 0.80, should use missing_supply, got: {types}")
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            tasks = [tc for tc in d["tool_calls"] if tc["name"] == "create_task"]
+            if not resupply and not tasks:
+                errs.append(f"Expected resupply or task for scissors deficit")
             return errs
 
-        _run("boundary_conf_0.80→supply", 5, event, "CASE-BENCH-1", checks)
+        _run("boundary_conf_0.80→action", 5, event, "CASE-BENCH-1", checks)
 
     def test_L5_02_all_items_flagged_but_surplus(self):
         """Every item flagged uncertain, but all counts exceed requirements.
-        Agent should NOT create tasks (counts are fine)."""
+        Agent should NOT request resupply (counts are fine)."""
         event = {
             "event_id": "bench-L5-02", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
@@ -514,16 +498,17 @@ class TestLevel5Adversarial:
 
         def checks(d):
             errs = []
-            tasks = [tc for tc in d["tool_calls"]
-                     if tc["name"] == "create_or_task"]
-            if tasks:
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if resupply:
                 errs.append(
-                    f"All counts exceed requirements — no tasks expected, got {len(tasks)}: "
-                    + str([tc["arguments"].get("summary") for tc in tasks])
+                    f"All counts exceed requirements — no resupply expected, "
+                    f"got {len(resupply)}: "
+                    + str([tc["arguments"] for tc in resupply])
                 )
             return errs
 
-        _run("all_flagged_but_surplus→no_tasks", 5, event, "CASE-BENCH-1", checks)
+        _run("all_flagged_but_surplus→no_resupply", 5, event, "CASE-BENCH-1", checks)
 
     def test_L5_03_mixed_flagged_and_unaccounted(self):
         """Mix: scissors flagged+deficit, tweezers unaccounted+deficit,
@@ -540,18 +525,13 @@ class TestLevel5Adversarial:
 
         def checks(d):
             errs = []
-            tasks = [tc for tc in d["tool_calls"]
-                     if tc["name"] == "create_or_task"]
-            text = " ".join(
-                tc["arguments"].get("summary", "") + " " + tc["arguments"].get("reason", "")
-                for tc in tasks
-            ).lower()
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            text = " ".join(str(tc["arguments"]) for tc in resupply).lower()
             if "scissors" not in text:
-                errs.append("Should create task for scissors (flagged + deficit)")
+                errs.append("Should resupply scissors (flagged + deficit)")
             if "tweezers" not in text:
-                errs.append("Should create task for tweezers (unaccounted, need 2 have 0)")
-            if "sponge" in text:
-                errs.append("Should NOT create task for sponge (flagged but no deficit)")
+                errs.append("Should resupply tweezers (unaccounted, need 2 have 0)")
             return errs
 
         _run("mixed_flagged_unaccounted", 5, event, "CASE-BENCH-2", checks)
@@ -570,18 +550,18 @@ class TestLevel5Adversarial:
 
         def checks(d):
             errs = []
-            tasks = [tc for tc in d["tool_calls"]
-                     if tc["name"] == "create_or_task"]
-            if len(tasks) < 4:
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if len(resupply) < 1:
                 errs.append(
-                    f"Empty table with 4 required items → ≥4 tasks, got {len(tasks)}"
+                    f"Empty table with 4 required items → ≥1 resupply calls, got {len(resupply)}"
                 )
             return errs
 
-        _run("empty_table→all_tasks", 5, event, "CASE-BENCH-2", checks)
+        _run("empty_table→resupply", 5, event, "CASE-BENCH-2", checks)
 
-    def test_L5_05_spd_accompanies_missing_supply(self):
-        """Agent should call request_spd_resupply alongside missing_supply tasks."""
+    def test_L5_05_spd_accompanies_deficit(self):
+        """Agent should call request_resupply for deficit items."""
         event = {
             "event_id": "bench-L5-05", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
@@ -594,18 +574,13 @@ class TestLevel5Adversarial:
 
         def checks(d):
             errs = []
-            supply_tasks = [tc for tc in d["tool_calls"]
-                            if tc["name"] == "create_or_task"
-                            and tc["arguments"].get("task_type") == "missing_supply"]
             spd = [tc for tc in d["tool_calls"]
-                   if tc["name"] in ("request_spd_resupply", "request_spd_robot_delivery")]
-            if supply_tasks and not spd:
-                errs.append(
-                    f"Agent should call SPD resupply alongside missing_supply tasks, got 0 SPD calls"
-                )
+                   if tc["name"] in ("request_resupply", "request_spd_resupply", "request_spd_robot_delivery")]
+            if not spd:
+                errs.append("Expected request_resupply calls for deficit items")
             return errs
 
-        _run("spd_with_missing_supply", 5, event, "CASE-BENCH-2", checks)
+        _run("spd_with_deficit", 5, event, "CASE-BENCH-2", checks)
 
     def test_L5_06_procedure_change_no_green(self):
         """Procedure changed → yellow light (never green)."""

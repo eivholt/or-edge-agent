@@ -184,14 +184,10 @@ Top-down clinical photograph of a stainless-steel back table in an operating roo
 
 Top-down clinical photograph of an operating room back table covered with a blue sterile surgical drape. Neatly arranged surgical instruments on the drape (scissors, sponges, tweezers). One stainless-steel scalpel is clearly placed 15 cm outside the drape boundary, sitting directly on the bare stainless-steel table surface. Sharp focus on the scalpel outside the drape. Bright overhead surgical lighting. DSLR, 35mm lens, ISO 400, clinical documentation style. No text, no watermarks, no logos. Stock photo style, editorial, for medical training simulation. 1:1 aspect ratio.
 
-3. Specimen Ready Check
-
-Clinical photograph of a mayo stand (small wheeled surgical tray) in an operating room. On the mayo stand are a pair of scissors and two gauze sponges. Next to them sits a small translucent plastic container with a screw-top lid resembling a specimen cup. The container is unlabeled and partially obscured by the sponges. Stainless-steel tray surface, blue drape underneath, blurred OR background. DSLR, 35mm lens, ISO 400, clinical documentation style. No text, no watermarks, no logos. Stock photo style, editorial, for medical training simulation. 1:1 aspect ratio.
-
-4. Room Turnover Check
+3. Room Turnover Check
 
 Wide-angle clinical photograph of an operating room between procedures. The room is partially cleaned but a hospital gurney with rumpled white sheets is still parked in the corner. An IV pole with an empty fluid bag hangs nearby. The main surgical table is bare. Overhead OR lights are on. Floor shows wheel marks. The scene conveys an incomplete room turnover — previous patient equipment not yet removed. DSLR, 35mm lens, ISO 400, clinical documentation style. No text, no watermarks, no logos. Stock photo style, editorial, for medical training simulation. 1:1 aspect ratio.
 
-5. PPE Compliance Check
+4. PPE Compliance Check
 
 Clinical photograph of an operating room instrument table from a ceiling-mounted camera angle. A person in blue surgical scrubs stands next to the sterile instrument table, wearing a surgical cap and gloves but conspicuously missing a surgical face mask — their nose and mouth are uncovered. Instruments are visible on the table. Bright surgical lighting, other masked staff blurred in the background. DSLR, 35mm lens, ISO 400, clinical documentation style. No text, no watermarks, no logos. Stock photo style, editorial, for medical training simulation. 1:1 aspect ratio.

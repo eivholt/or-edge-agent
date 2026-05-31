@@ -1,4 +1,4 @@
-from apps.agent.validation import validate_decision, should_call_vlm
+from apps.agent.validation import validate_decision
 
 
 def test_rejects_unknown_tool():
@@ -7,50 +7,52 @@ def test_rejects_unknown_tool():
             {"name": "delete_patient_record", "arguments": {}}
         ]
     }
-    event = {"confidence": 0.9}
+    event = {}
     errors = validate_decision(decision, event)
     assert errors
 
 
-def test_rejects_actuation_with_low_confidence():
+def test_accepts_allowed_tools():
     decision = {
         "tool_calls": [
-            {
-                "name": "set_or_prep_light",
-                "arguments": {
-                    "room_id": "OR-2",
-                    "color": "yellow"
-                }
-            }
+            {"name": "get_case", "arguments": {"case_id": "CASE-1042"}},
+            {"name": "check_supplies", "arguments": {}},
+            {"name": "set_stacklight", "arguments": {"color": "green"}},
         ]
     }
-    event = {"confidence": 0.5}
+    event = {}
+    errors = validate_decision(decision, event)
+    assert not errors
+
+
+def test_rejects_invalid_task_type():
+    decision = {
+        "tool_calls": [
+            {"name": "create_task", "arguments": {"task_type": "invalid_type"}}
+        ]
+    }
+    event = {}
     errors = validate_decision(decision, event)
     assert errors
 
 
-def test_should_call_vlm_low_confidence():
-    event = {
-        "confidence": 0.72,
-        "event_type": "or_setup_state_change",
-        "missing_or_uncertain": [],
+def test_rejects_invalid_light_color():
+    decision = {
+        "tool_calls": [
+            {"name": "set_stacklight", "arguments": {"color": "blue"}}
+        ]
     }
-    assert should_call_vlm(event) is True
+    event = {}
+    errors = validate_decision(decision, event)
+    assert errors
 
 
-def test_should_call_vlm_sterile_zone_ambiguity():
-    event = {
-        "confidence": 0.90,
-        "event_type": "sterile_zone_ambiguity",
-        "missing_or_uncertain": [],
+def test_rejects_resupply_without_item():
+    decision = {
+        "tool_calls": [
+            {"name": "request_resupply", "arguments": {}}
+        ]
     }
-    assert should_call_vlm(event) is True
-
-
-def test_should_not_call_vlm_high_confidence_normal():
-    event = {
-        "confidence": 0.95,
-        "event_type": "or_setup_state_change",
-        "missing_or_uncertain": [],
-    }
-    assert should_call_vlm(event) is False
+    event = {}
+    errors = validate_decision(decision, event)
+    assert errors

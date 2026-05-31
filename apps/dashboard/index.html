@@ -10,7 +10,7 @@
     --surface: #1a1d27;
     --border: #2a2d3a;
     --text: #e4e4e7;
-    --muted: #71717a;
+    --muted: #a1a1aa;
     --accent: #6366f1;
     --accent-glow: rgba(99,102,241,.25);
     --green: #22c55e;
@@ -255,8 +255,8 @@
 
   /* ── Validation checklist ─────────────────────────── */
   .val-checks { list-style: none; padding: 0; margin: .25rem 0 0; font-size: .55rem; color: var(--muted); display: flex; flex-wrap: wrap; gap: 0 .15rem; line-height: 1.5; }
-  .val-checks li::before { content: '○ '; opacity: .5; }
-  .val-checks li::after { content: ' |'; opacity: .3; }
+  .val-checks li::before { content: '○ '; opacity: .7; }
+  .val-checks li::after { content: ' |'; opacity: .5; }
   .val-checks li:last-child::after { content: ''; }
   .val-checks li.pass::before { content: '✓ '; color: var(--green); opacity: 1; }
   .val-checks li.fail::before { content: '✗ '; color: var(--red); opacity: 1; }
@@ -400,7 +400,7 @@
     width: 100%; aspect-ratio: 1; border-radius: 6px;
     margin-top: .4rem; border: 1px dashed var(--border);
     background: var(--surface); display: flex; align-items: center; justify-content: center;
-    color: var(--muted); font-size: .55rem; opacity: .4;
+    color: var(--muted); font-size: .55rem; opacity: .6;
   }
 
   /* ── Sidebar ────────────────────────────────────────── */
@@ -451,7 +451,6 @@
   .task-entry:last-child { margin-bottom:0; }
   .task-entry[data-type="missing_supply"] { border-left-color:var(--yellow); background:rgba(234,179,8,.04); }
   .task-entry[data-type="porter_hold"], .task-entry[data-type="porter_release"] { border-left-color:var(--purple); background:rgba(168,85,247,.04); }
-  .task-entry[data-type="specimen_handoff"] { border-left-color:#06b6d4; background:rgba(6,182,212,.04); }
   .task-entry[data-type="human_review"] { border-left-color:var(--red); background:rgba(239,68,68,.04); }
   .task-entry[data-type="procedure_change_review"] { border-left-color:var(--orange); background:rgba(249,115,22,.04); }
   .task-entry[data-type="nurse"] { border-left-color:var(--yellow); background:rgba(234,179,8,.04); }
@@ -460,7 +459,7 @@
   .task-icon { font-size:.8rem; flex-shrink:0; line-height:1; }
   .task-badge { font-size:.5rem; font-weight:700; text-transform:uppercase; padding:1px 5px; border-radius:3px; white-space:nowrap; flex-shrink:0; letter-spacing:.04em; background:rgba(148,163,184,.15); color:var(--muted); border:1px solid rgba(148,163,184,.2); }
   .task-type { font-size:.66rem; font-weight:600; color:var(--text); }
-  .task-summary { opacity:.65; font-size:.62rem; width:100%; padding-left:1.3rem; }
+  .task-summary { opacity:.85; font-size:.62rem; width:100%; padding-left:1.3rem; }
   .task-method { font-size:.56rem; font-weight:600; padding:1px 5px; border-radius:3px; white-space:nowrap; flex-shrink:0; }
   .task-method.nurse { background:rgba(6,182,212,.15); color:var(--cyan); border:1px solid rgba(6,182,212,.25); }
   .task-method.robot { background:rgba(59,130,246,.15); color:var(--blue); border:1px solid rgba(59,130,246,.25); }
@@ -1259,7 +1258,7 @@ function updateBody(comp, ev) {
     if (body.dataset.count === undefined || body.dataset.count === '0') body.innerHTML = '';
     const n = parseInt(body.dataset.count || '0') + 1;
     body.dataset.count = n;
-    const taskIcons = {missing_supply:'📦', procedure_change_review:'🔄', human_review:'👁️', porter_hold:'🚏', porter_release:'🚏', specimen_handoff:'🧫'};
+    const taskIcons = {missing_supply:'📦', procedure_change_review:'🔄', human_review:'👁️', porter_hold:'🚏', porter_release:'🚏'};
     const icon = taskIcons[ev.task_type] || '📋';
     let entry = '<div class="task-entry" data-type="' + esc(ev.task_type || '') + '">';
     entry += '<span class="task-icon">' + icon + '</span>';
