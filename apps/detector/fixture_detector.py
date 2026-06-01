@@ -16,7 +16,7 @@ def main():
             event = json.loads(Path(path).read_text())
             out.write(json.dumps(event) + "\n")
             out.flush()
-            print("emitted", event["event_id"], event["event_type"])
+            print("emitted", event["case_id"])
             time.sleep(2)
 
 

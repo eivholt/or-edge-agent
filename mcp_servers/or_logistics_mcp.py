@@ -77,35 +77,28 @@ def set_stacklight(room_id: str, color: str) -> dict:
 
 @mcp.tool()
 def reconcile_setup(
-    missing_or_uncertain: list[str],
     required_items: dict[str, int],
     visible_items: dict[str, int],
 ) -> dict:
     """
     Compare detected item counts against the surgical pathway's required counts.
 
-    Returns which required items have a deficit and which are unaccounted for.
+    Returns which required items have a deficit.
     Use this BEFORE deciding whether to create tasks or request resupply.
 
-    - actionable_missing: items flagged uncertain by detector AND required with a deficit.
-    - unaccounted: items required but with insufficient visible count (not flagged).
+    - deficits: items required but with insufficient visible count.
     - all_present: true if every required item meets its count.
     """
-    missing = set(missing_or_uncertain)
-    actionable_missing = []
-    unaccounted = []
+    deficits = []
 
     for item, need in sorted(required_items.items()):
         have = visible_items.get(item, 0)
-        if item in missing and have < need:
-            actionable_missing.append(item)
-        elif item not in missing and have < need:
-            unaccounted.append(item)
+        if have < need:
+            deficits.append(item)
 
     return {
-        "actionable_missing": actionable_missing,
-        "unaccounted": unaccounted,
-        "all_present": len(actionable_missing) == 0 and len(unaccounted) == 0,
+        "deficits": deficits,
+        "all_present": len(deficits) == 0,
     }
 
 

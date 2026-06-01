@@ -19,37 +19,21 @@ def scenario(request):
 
 def test_scenario_validates(scenario):
     event = ORSceneEvent.model_validate(scenario)
-    assert event.event_id == scenario["event_id"]
     assert event.case_id == scenario["case_id"]
-    assert 0.0 <= event.confidence <= 1.0
+    assert event.room_id == scenario["room_id"]
+    assert event.image_path == scenario["image_path"]
 
 
 def test_missing_scissors():
     data = json.loads((SCENARIOS_DIR / "missing_scissors.json").read_text())
     event = ORSceneEvent.model_validate(data)
-    assert event.event_type == "or_setup_state_change"
     # visible_items populated at runtime by EI inference, not in JSON
     assert event.visible_items == {}
-    assert event.missing_or_uncertain == []
-    assert event.confidence == 1.0  # default
 
 
-def test_rejects_invalid_confidence():
+def test_visible_items_populated_at_runtime():
+    """Visible items can be added after loading the scenario."""
     data = json.loads((SCENARIOS_DIR / "missing_scissors.json").read_text())
-    data["confidence"] = 1.5
-    with pytest.raises(Exception):
-        ORSceneEvent.model_validate(data)
-
-
-def test_rejects_unknown_event_type():
-    data = json.loads((SCENARIOS_DIR / "missing_scissors.json").read_text())
-    data["event_type"] = "unknown_type"
-    with pytest.raises(Exception):
-        ORSceneEvent.model_validate(data)
-
-
-def test_rejects_bad_event_id():
-    data = json.loads((SCENARIOS_DIR / "missing_scissors.json").read_text())
-    data["event_id"] = "bad-id"
-    with pytest.raises(Exception):
-        ORSceneEvent.model_validate(data)
+    data["visible_items"] = {"scalpel": 1, "scissors": 0}
+    event = ORSceneEvent.model_validate(data)
+    assert event.visible_items == {"scalpel": 1, "scissors": 0}

@@ -50,16 +50,17 @@ WORKFLOW — always follow this order:
 4. Now take ALL applicable actions together:
    a) Call set_stacklight:
       - set red if inspect_scene verdict is true (sterile zone issue).
-      - set yellow if check_supplies shows deficits OR get_case returned open_items.
-      - set green ONLY when: no sterile issue, no deficits, AND open_items is empty.
-   b) If inspect_scene verdict is true, call create_task with task_type="human_review" for the sterile zone issue.
-   c) For EACH deficit item from check_supplies, call request_resupply.
-   d) If the case open_items list is non-empty, call create_task with task_type="human_review".
+      - set yellow if check_supplies shows deficits.
+      - set green ONLY when: no sterile issue AND no deficits.
+   b) If inspect_scene verdict is true → call create_task(human_review) for the sterile zone issue.
+   c) Deficit items → call request_resupply for each one. That is all — move on.
+
+ACTION MAPPING (use exactly the right tool for each situation):
+- deficit item              → request_resupply (the ONLY correct tool for deficits)
+- sterile zone verdict=true → create_task
 
 RULES:
-- open_items from get_case ALWAYS means yellow — never set green when open_items exist.
-- Deficits need request_resupply — never use create_task for a deficit item.
-- Do NOT create tasks based on missing_or_uncertain from the event. Only act on deficits from check_supplies and open_items from get_case.
+- Do NOT create tasks for deficit items. Only use request_resupply for deficits.
 - Every run MUST include exactly one set_stacklight call.
 - Never ask the user for input. Always decide and act autonomously.
 - Your final text response must be a SHORT summary (2-4 sentences max)."""
@@ -145,8 +146,8 @@ def get_case(
     r = httpx.get(f"{EMR_BASE_URL}/cases/{case_id}", timeout=10)
     r.raise_for_status()
     case = r.json()
-    # Strip fields irrelevant to agent decisions to avoid 3B hallucinations
-    for key in ("porter_release_allowed", "patient_id", "phase", "priority"):
+    # Strip fields irrelevant to agent decisions
+    for key in ("patient_id",):
         case.pop(key, None)
     ctx.deps.case = case
     ctx.deps.emit_tool_progress("get_case", ctx)
@@ -210,13 +211,17 @@ def create_task(
     summary: str,
     reason: str,
 ) -> dict:
-    """Create a workflow task.
+    """Create a workflow task for sterile zone issues only.
+
+    Use ONLY when inspect_scene verdict is true (sterile zone issue).
+
+    For supply deficits, use request_resupply instead.
 
     Args:
         case_id: The case identifier.
         task_type: One of human_review.
         priority: One of low, normal, high.
-        summary: Short description of what is missing or needs review.
+        summary: Short description of what needs review.
         reason: Why this task is being created.
     """
     result = {
@@ -526,26 +531,11 @@ def reconcile_setup(event: dict, case: dict) -> dict:
     deficits = reconcile(event, case)
     all_present = len(deficits) == 0
 
-    # Check if the case has unresolved open items or a procedure change
-    open_items = case.get("open_items", [])
-    phase = case.get("phase", "")
-    needs_review = bool(open_items) or "changed" in phase
-
-    pending = [item.replace("_", " ") for item in open_items]
-
-    if all_present and not needs_review:
+    if all_present:
         summary = "All instrument types match or exceed requirements."
-    elif all_present and needs_review:
-        summary = (
-            "All instrument types match or exceed requirements, "
-            f"but case has pending tasks requiring review: {', '.join(pending)}. "
-            "Create human_review task."
-        )
     else:
         parts = [f"{d['item']} ({d['have']}/{d['need']})" for d in deficits]
-        summary = f"{len(deficits)} deficit(s): {', '.join(parts)}. Request resupply for each."
-        if needs_review:
-            summary += f" Pending tasks also require review: {', '.join(pending)}."
+        summary = f"{len(deficits)} deficit(s): {', '.join(parts)}. Action: request_resupply for each."
 
     return {
         "all_present": all_present,

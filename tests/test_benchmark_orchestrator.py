@@ -3,9 +3,9 @@
 Levels:
   1. Basic:       Single clear signal → single correct tool call
   2. Standard:    Multiple gaps → correct multi-tool response
-  3. Nuanced:     Confidence thresholds, task_type discrimination, priority mapping
-  4. Complex:     Multi-step combos (procedure change = 3 tools), conditional logic
-  5. Adversarial: Conflicting signals, near-boundary confidence, distractors
+  3. Nuanced:     Task_type discrimination, priority mapping
+  4. Complex:     Multi-step combos, conditional logic
+  5. Adversarial: Conflicting signals, near-boundary counts, distractors
 
 Requirements:
   - Synthetic EMR API running on :9000
@@ -104,15 +104,11 @@ class TestLevel1Basic:
     """Single, unambiguous signal → exactly the right tool call."""
 
     def test_L1_01_all_present_green_light(self):
-        """Everything present, high confidence → green light (VLM clears sterile zone)."""
+        """Everything present → green light."""
         event = {
-            "event_id": "bench-L1-01", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 1, "scissors": 1, "sponge": 2},
-            "missing_or_uncertain": [],
-            "zone": "back_table", "confidence": 0.95,
-            "timestamp": "2026-05-16T08:00:00Z",
         }
 
         def checks(d):
@@ -129,15 +125,11 @@ class TestLevel1Basic:
         _run("all_present→green", 1, event, "CASE-BENCH-1", checks)
 
     def test_L1_02_single_missing_item_resupply(self):
-        """One item flagged missing with deficit → request_resupply call."""
+        """One item with deficit → request_resupply call."""
         event = {
-            "event_id": "bench-L1-02", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 1, "sponge": 2},
-            "missing_or_uncertain": ["scissors"],
-            "zone": "back_table", "confidence": 0.90,
-            "timestamp": "2026-05-16T08:01:00Z",
         }
 
         def checks(d):
@@ -156,13 +148,9 @@ class TestLevel1Basic:
     def test_L1_03_no_action_surplus(self):
         """Visible counts exceed required — no tasks needed."""
         event = {
-            "event_id": "bench-L1-03", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 3, "scissors": 2, "sponge": 5},
-            "missing_or_uncertain": [],
-            "zone": "back_table", "confidence": 0.93,
-            "timestamp": "2026-05-16T08:02:00Z",
         }
 
         def checks(d):
@@ -185,15 +173,11 @@ class TestLevel2Standard:
     """Multiple gaps or signals → agent must issue multiple correct tools."""
 
     def test_L2_01_two_missing_items(self):
-        """Two items flagged missing with deficit → two request_resupply calls."""
+        """Two items with deficit → two request_resupply calls."""
         event = {
-            "event_id": "bench-L2-01", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 2, "scissors": 1, "sponge": 4, "tweezers": 1},
-            "missing_or_uncertain": ["scissors", "tweezers"],
-            "zone": "back_table", "confidence": 0.88,
-            "timestamp": "2026-05-16T08:10:00Z",
         }
 
         def checks(d):
@@ -212,15 +196,11 @@ class TestLevel2Standard:
         _run("two_missing→two_tasks", 2, event, "CASE-BENCH-2", checks)
 
     def test_L2_02_three_items_missing(self):
-        """Three items with deficits → three tasks."""
+        """Three items with deficits → three resupply calls."""
         event = {
-            "event_id": "bench-L2-02", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 2, "scissors": 0, "sponge": 2, "tweezers": 1},
-            "missing_or_uncertain": ["scissors", "sponge", "tweezers"],
-            "zone": "back_table", "confidence": 0.85,
-            "timestamp": "2026-05-16T08:11:00Z",
         }
 
         def checks(d):
@@ -234,15 +214,11 @@ class TestLevel2Standard:
         _run("three_missing→three_resupply", 2, event, "CASE-BENCH-2", checks)
 
     def test_L2_03_unaccounted_not_flagged(self):
-        """Items not flagged by detector but with count deficit → tasks."""
+        """Items with count deficit → resupply calls."""
         event = {
-            "event_id": "bench-L2-03", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 2},
-            "missing_or_uncertain": [],
-            "zone": "back_table", "confidence": 0.90,
-            "timestamp": "2026-05-16T08:12:00Z",
         }
 
         def checks(d):
@@ -262,25 +238,19 @@ class TestLevel2Standard:
 
 
 # ═════════════════════════════════════════════════════════════════════
-# LEVEL 3 — NUANCED: confidence thresholds, task_type discrimination
+# LEVEL 3 — NUANCED: task_type discrimination
 # ═════════════════════════════════════════════════════════════════════
 
 
 class TestLevel3Nuanced:
-    """Tests that require understanding confidence thresholds and
-    choosing the correct task_type or light color."""
+    """Tests that require choosing the correct task_type or light color."""
 
-    def test_L3_01_low_confidence_resupply(self):
-        """Low confidence + missing item → agent should request resupply
-        and set yellow light."""
+    def test_L3_01_deficit_resupply_yellow(self):
+        """Missing item → agent should request resupply and set yellow light."""
         event = {
-            "event_id": "bench-L3-01", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 1, "sponge": 2},
-            "missing_or_uncertain": ["scissors"],
-            "zone": "back_table", "confidence": 0.72,
-            "timestamp": "2026-05-16T08:20:00Z",
         }
 
         def checks(d):
@@ -294,42 +264,33 @@ class TestLevel3Nuanced:
                 errs.append(f"Expected yellow/red light for deficit, got: {lights}")
             return errs
 
-        _run("low_conf→resupply", 3, event, "CASE-BENCH-1", checks)
+        _run("deficit→resupply+yellow", 3, event, "CASE-BENCH-1", checks)
 
-    def test_L3_02_sterile_zone_ambiguity_action(self):
-        """sterile_zone_ambiguity event → agent should take action (task or resupply)."""
+    def test_L3_02_deficit_triggers_action(self):
+        """Deficit → agent should take action (resupply)."""
         event = {
-            "event_id": "bench-L3-02", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
-            "event_type": "sterile_zone_ambiguity",
             "visible_items": {"scalpel": 1, "scissors": 1, "sponge": 1},
-            "missing_or_uncertain": ["sponge"],
-            "zone": "back_table", "confidence": 0.85,
-            "timestamp": "2026-05-16T08:21:00Z",
         }
 
         def checks(d):
             errs = []
-            # Should take action: human_review task for sterile issue OR resupply for deficit
-            tasks = [tc for tc in d["tool_calls"] if tc["name"] == "create_task"]
+            # sponge: need 2, have 1 → deficit
             resupply = [tc for tc in d["tool_calls"]
                         if tc["name"] in ("request_resupply", "request_spd_resupply")]
-            if not tasks and not resupply:
-                errs.append("sterile_zone_ambiguity should trigger at least one action (task or resupply)")
+            if not resupply:
+                errs.append("Deficit should trigger resupply")
             return errs
 
-        _run("sterile_zone→action", 3, event, "CASE-BENCH-1", checks)
+        _run("deficit→action", 3, event, "CASE-BENCH-1", checks)
 
-    def test_L3_03_high_confidence_resupply(self):
-        """High confidence + missing item → request_resupply call."""
+    def test_L3_03_high_count_resupply(self):
+        """Missing item → request_resupply call."""
         event = {
-            "event_id": "bench-L3-03", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 2, "scissors": 1, "sponge": 4, "tweezers": 2},
-            "missing_or_uncertain": ["scissors"],
-            "zone": "back_table", "confidence": 0.92,
-            "timestamp": "2026-05-16T08:22:00Z",
         }
 
         def checks(d):
@@ -337,26 +298,22 @@ class TestLevel3Nuanced:
             resupply = [tc for tc in d["tool_calls"]
                         if tc["name"] in ("request_resupply", "request_spd_resupply")]
             if not resupply:
-                errs.append(f"Expected request_resupply at high conf, got none")
+                errs.append(f"Expected request_resupply for scissors deficit, got none")
             return errs
 
-        _run("high_conf→resupply", 3, event, "CASE-BENCH-2", checks)
+        _run("scissors_deficit→resupply", 3, event, "CASE-BENCH-2", checks)
 
-    def test_L3_04_flagged_but_no_deficit(self):
-        """Item flagged uncertain but count meets requirement → no task for it."""
+    def test_L3_04_no_deficit_no_task(self):
+        """Count meets requirement → no task for it."""
         event = {
-            "event_id": "bench-L3-04", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 2, "scissors": 1, "sponge": 3},
-            "missing_or_uncertain": ["scalpel"],
-            "zone": "back_table", "confidence": 0.88,
-            "timestamp": "2026-05-16T08:23:00Z",
         }
 
         def checks(d):
             errs = []
-            # scalpel: need 1, have 2 — no deficit despite being flagged
+            # scalpel: need 1, have 2 — no deficit
             task_calls = [tc for tc in d["tool_calls"]
                           if tc["name"] == "create_task"]
             for tc in task_calls:
@@ -366,7 +323,7 @@ class TestLevel3Nuanced:
                     errs.append("Should NOT create task for scalpel (no deficit: need 1, have 2)")
             return errs
 
-        _run("flagged_no_deficit→no_task", 3, event, "CASE-BENCH-1", checks)
+        _run("no_deficit→no_task", 3, event, "CASE-BENCH-1", checks)
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -377,71 +334,54 @@ class TestLevel3Nuanced:
 class TestLevel4Complex:
     """Multi-tool combinations that require following compound rules."""
 
-    def test_L4_01_procedure_changed_triple(self):
-        """Pathway changed → agent should set yellow light and create
-        a human_review task for the procedure change."""
+    def test_L4_01_all_present_green(self):
+        """All items present, no sterile issue → green light, no tasks."""
         event = {
-            "event_id": "bench-L4-01", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-4",
-            "event_type": "visually_ready_but_pathway_changed",
             "visible_items": {"scalpel": 3, "scissors": 2, "sponge": 6, "tweezers": 2},
-            "missing_or_uncertain": [],
-            "zone": "back_table", "confidence": 0.91,
-            "timestamp": "2026-05-16T08:30:00Z",
-        }
-
-        def checks(d):
-            errs = []
-            types = _task_types(d)
-            if "human_review" not in types:
-                errs.append(f"Expected human_review for procedure change, got: {types}")
-            lights = _light_colors(d)
-            if "yellow" not in lights:
-                errs.append(f"Expected yellow light, got: {lights}")
-            return errs
-
-        _run("procedure_changed→review+yellow", 4, event, "CASE-BENCH-4", checks)
-
-    def test_L4_02_procedure_changed_with_deficits(self):
-        """Pathway changed AND items are short → human_review + resupply."""
-        event = {
-            "event_id": "bench-L4-02", "room_id": "OR-BENCH",
-            "case_id": "CASE-BENCH-4",
-            "event_type": "visually_ready_but_pathway_changed",
-            "visible_items": {"scalpel": 2, "scissors": 1, "sponge": 4, "tweezers": 2},
-            "missing_or_uncertain": ["scissors", "sponge"],
-            "zone": "back_table", "confidence": 0.88,
-            "timestamp": "2026-05-16T08:31:00Z",
         }
 
         def checks(d):
             errs = []
             lights = _light_colors(d)
-            # VLM verdict=true → red is acceptable; yellow also fine
-            if "yellow" not in lights and "red" not in lights:
-                errs.append("Expected yellow or red light")
-            # Should have human_review task + resupply calls
-            tasks = [tc for tc in d["tool_calls"] if tc["name"] == "create_task"]
+            if "green" not in lights:
+                errs.append(f"Expected green light when all present, got: {lights}")
             resupply = [tc for tc in d["tool_calls"]
                         if tc["name"] in ("request_resupply", "request_spd_resupply")]
-            if not tasks:
-                errs.append("Expected human_review task for procedure change")
+            if resupply:
+                errs.append(f"No resupply expected, got {len(resupply)}")
+            return errs
+
+        _run("all_present→green", 4, event, "CASE-BENCH-4", checks)
+
+    def test_L4_02_deficits_with_resupply(self):
+        """Items short → yellow + resupply."""
+        event = {
+            "room_id": "OR-BENCH",
+            "case_id": "CASE-BENCH-4",
+            "visible_items": {"scalpel": 2, "scissors": 1, "sponge": 4, "tweezers": 2},
+        }
+
+        def checks(d):
+            errs = []
+            lights = _light_colors(d)
+            if "yellow" not in lights and "red" not in lights:
+                errs.append("Expected yellow or red light for deficits")
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
             if not resupply:
                 errs.append("Expected resupply for deficits")
             return errs
 
-        _run("procedure_changed+deficits", 4, event, "CASE-BENCH-4", checks)
+        _run("deficits→resupply+yellow", 4, event, "CASE-BENCH-4", checks)
 
     def test_L4_03_high_priority_propagation(self):
         """High-priority case → resupply should be requested for deficits."""
         event = {
-            "event_id": "bench-L4-03", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-5",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 1, "scissors": 1, "sponge": 2, "tweezers": 1},
-            "missing_or_uncertain": ["scalpel", "scissors", "tweezers"],
-            "zone": "back_table", "confidence": 0.87,
-            "timestamp": "2026-05-16T08:32:00Z",
         }
 
         def checks(d):
@@ -463,16 +403,12 @@ class TestLevel4Complex:
 class TestLevel5Adversarial:
     """Edge cases and tricky scenarios that probe model understanding."""
 
-    def test_L5_01_exact_boundary_confidence(self):
-        """Confidence exactly 0.80 with missing item → should request resupply."""
+    def test_L5_01_deficit_resupply(self):
+        """Missing item → should request resupply."""
         event = {
-            "event_id": "bench-L5-01", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 1, "sponge": 2},
-            "missing_or_uncertain": ["scissors"],
-            "zone": "back_table", "confidence": 0.80,
-            "timestamp": "2026-05-16T08:40:00Z",
         }
 
         def checks(d):
@@ -484,19 +420,14 @@ class TestLevel5Adversarial:
                 errs.append(f"Expected resupply or task for scissors deficit")
             return errs
 
-        _run("boundary_conf_0.80→action", 5, event, "CASE-BENCH-1", checks)
+        _run("deficit→action", 5, event, "CASE-BENCH-1", checks)
 
-    def test_L5_02_all_items_flagged_but_surplus(self):
-        """Every item flagged uncertain, but all counts exceed requirements.
-        Agent should NOT request resupply (counts are fine)."""
+    def test_L5_02_all_items_surplus_no_resupply(self):
+        """All counts exceed requirements → agent should NOT request resupply."""
         event = {
-            "event_id": "bench-L5-02", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 3, "scissors": 2, "sponge": 4},
-            "missing_or_uncertain": ["scalpel", "scissors", "sponge"],
-            "zone": "back_table", "confidence": 0.85,
-            "timestamp": "2026-05-16T08:41:00Z",
         }
 
         def checks(d):
@@ -511,19 +442,15 @@ class TestLevel5Adversarial:
                 )
             return errs
 
-        _run("all_flagged_but_surplus→no_resupply", 5, event, "CASE-BENCH-1", checks)
+        _run("surplus→no_resupply", 5, event, "CASE-BENCH-1", checks)
 
-    def test_L5_03_mixed_flagged_and_unaccounted(self):
-        """Mix: scissors flagged+deficit, tweezers unaccounted+deficit,
-        sponge flagged but no deficit. Only scissors+tweezers get tasks."""
+    def test_L5_03_mixed_deficit_and_surplus(self):
+        """Mix: scissors deficit, tweezers deficit,
+        sponge surplus. Only scissors+tweezers get resupply."""
         event = {
-            "event_id": "bench-L5-03", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 2, "scissors": 1, "sponge": 4, "tweezers": 0},
-            "missing_or_uncertain": ["scissors", "sponge"],
-            "zone": "back_table", "confidence": 0.90,
-            "timestamp": "2026-05-16T08:42:00Z",
         }
 
         def checks(d):
@@ -532,23 +459,19 @@ class TestLevel5Adversarial:
                         if tc["name"] in ("request_resupply", "request_spd_resupply")]
             text = " ".join(str(tc["arguments"]) for tc in resupply).lower()
             if "scissors" not in text:
-                errs.append("Should resupply scissors (flagged + deficit)")
+                errs.append("Should resupply scissors (deficit)")
             if "tweezers" not in text:
-                errs.append("Should resupply tweezers (unaccounted, need 2 have 0)")
+                errs.append("Should resupply tweezers (need 2 have 0)")
             return errs
 
-        _run("mixed_flagged_unaccounted", 5, event, "CASE-BENCH-2", checks)
+        _run("mixed_deficit_surplus", 5, event, "CASE-BENCH-2", checks)
 
     def test_L5_04_zero_visible_items(self):
-        """Nothing visible at all — all 4 required items unaccounted."""
+        """Nothing visible at all — all 4 required items missing."""
         event = {
-            "event_id": "bench-L5-04", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
-            "event_type": "or_setup_state_change",
             "visible_items": {},
-            "missing_or_uncertain": [],
-            "zone": "back_table", "confidence": 0.82,
-            "timestamp": "2026-05-16T08:43:00Z",
         }
 
         def checks(d):
@@ -566,13 +489,9 @@ class TestLevel5Adversarial:
     def test_L5_05_spd_accompanies_deficit(self):
         """Agent should call request_resupply for deficit items."""
         event = {
-            "event_id": "bench-L5-05", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-2",
-            "event_type": "or_setup_state_change",
             "visible_items": {"scalpel": 1, "scissors": 0, "sponge": 2, "tweezers": 1},
-            "missing_or_uncertain": ["scissors", "sponge", "tweezers"],
-            "zone": "back_table", "confidence": 0.88,
-            "timestamp": "2026-05-16T08:44:00Z",
         }
 
         def checks(d):
@@ -585,28 +504,22 @@ class TestLevel5Adversarial:
 
         _run("spd_with_deficit", 5, event, "CASE-BENCH-2", checks)
 
-    def test_L5_06_procedure_change_no_green(self):
-        """Procedure changed → yellow light (never green)."""
+    def test_L5_06_all_present_no_deficit(self):
+        """All items present → green light (never yellow when no deficit)."""
         event = {
-            "event_id": "bench-L5-06", "room_id": "OR-BENCH",
+            "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-4",
-            "event_type": "visually_ready_but_pathway_changed",
             "visible_items": {"scalpel": 3, "scissors": 2, "sponge": 6, "tweezers": 2},
-            "missing_or_uncertain": [],
-            "zone": "back_table", "confidence": 0.93,
-            "timestamp": "2026-05-16T08:45:00Z",
         }
 
         def checks(d):
             errs = []
             lights = _light_colors(d)
-            if "green" in lights:
-                errs.append("Should NOT set green for procedure_changed (must be yellow)")
-            if "yellow" not in lights:
-                errs.append(f"Expected yellow light, got: {lights}")
+            if "yellow" in lights:
+                errs.append("Should NOT set yellow when all items present and no sterile issue")
             return errs
 
-        _run("procedure_change→no_green", 5, event, "CASE-BENCH-4", checks)
+        _run("all_present→not_yellow", 5, event, "CASE-BENCH-4", checks)
 
 
 # ═════════════════════════════════════════════════════════════════════
@@ -634,7 +547,7 @@ def print_benchmark_report():
         print(f"  {r.name:<40} {r.level:>2} {status:>8} {r.latency_ms:>8.0f}ms")
         if not r.passed:
             for e in r.errors[:3]:
-                print(f"    → {e}")
+                print(f"      → {e}")
 
     print("-" * 72)
     total = len(RESULTS)

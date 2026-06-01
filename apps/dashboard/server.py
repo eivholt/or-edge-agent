@@ -95,7 +95,6 @@ async def list_cases():
                     cases.append({
                         "case_id": c["case_id"],
                         "procedure": c.get("procedure", ""),
-                        "phase": c.get("phase", ""),
                         "required_items": c.get("required_items", []),
                     })
         return cases
@@ -124,7 +123,6 @@ async def list_scenarios():
         scenarios.append({
             "name": p.stem,
             "case_id": data.get("case_id"),
-            "event_type": data.get("event_type"),
         })
     return scenarios
 
@@ -255,7 +253,6 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     total_visible = sum(visible.values()) if isinstance(visible, dict) else len(visible)
 
     _emit("detector",
-          event_type=event.get("event_type"),
           visible_items=visible,
           missing_items=[],
           image_url=image_url,

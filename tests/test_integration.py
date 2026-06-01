@@ -39,20 +39,23 @@ EXPECTED = {
         "light": "green",
         "has_deficits": False,
         "min_resupply": 0,
+        "max_review_tasks": 0,
     },
     "missing_scissors": {
         # CASE-1042: EI sees scalpel:2, sponge:3, tweezers:2, no scissors
-        # VLM verdict=false → yellow light from deficits
+        # VLM verdict=false → yellow from deficits
         "light": "yellow",
         "has_deficits": True,
         "min_resupply": 1,
+        "max_review_tasks": 0,  # deficits → resupply only, no create_task
     },
     "missing_something": {
         # CASE-1042: EI sees scissors:2, scalpel:1, sponge:4, tweezers:1
-        # VLM verdict=false → yellow light from deficits
+        # VLM verdict=false → yellow from deficits
         "light": "yellow",
         "has_deficits": True,
         "min_resupply": 1,
+        "max_review_tasks": 0,  # deficits → resupply only, no create_task
     },
     "instrument_out_of_zone": {
         # CASE-1045: required scalpel:2, scissors:1, sponge:3, tweezers:2
@@ -65,10 +68,11 @@ EXPECTED = {
     },
     "sterile_zone_ambiguity": {
         # CASE-1042: EI sees scalpel:1, scissors:2, sponge:3 → multiple deficits
-        # VLM verdict=false → yellow light from deficits
+        # VLM verdict=false → yellow from deficits
         "light": "yellow",
         "has_deficits": True,
         "min_resupply": 0,
+        "max_review_tasks": 0,  # deficits → resupply only, no create_task
     },
 }
 
@@ -179,6 +183,16 @@ class TestFullPipeline:
                 if total_tasks < min_any:
                     errs.append(
                         f"review_tasks={total_tasks}, expected >={min_any}"
+                    )
+
+            # create_task must not be used for deficit items
+            max_tasks = expect.get("max_review_tasks")
+            if max_tasks is not None:
+                actual_tasks = len(ext["review_tasks"])
+                if actual_tasks > max_tasks:
+                    errs.append(
+                        f"review_tasks={actual_tasks}, expected <={max_tasks} "
+                        f"(create_task should not be used for deficits)"
                     )
 
             # inspect_scene should always be called when objects are detected

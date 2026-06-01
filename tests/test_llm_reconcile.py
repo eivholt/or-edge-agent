@@ -14,20 +14,14 @@ from apps.agent.validation import validate_decision
 
 # Shared detector event — identical for both cases
 EVENT = {
-    "event_id": "evt-9001",
     "room_id": "OR-2",
     "case_id": "PLACEHOLDER",
-    "event_type": "or_setup_state_change",
     "visible_items": {
         "scalpel": 2,
         "scissors": 2,
         "sponge": 4,
         "tweezers": 3,
     },
-    "missing_or_uncertain": ["tweezers"],
-    "zone": "back_table",
-    "confidence": 0.88,
-    "timestamp": "2026-05-15T08:00:00+02:00",
     "image_path": "frames/frame_all_present.png",
 }
 
@@ -63,7 +57,6 @@ def test_resupply_when_pathway_requires_item():
         "sponge": 4,
         "tweezers": 1,
     }
-    event_with_deficit["missing_or_uncertain"] = ["scissors"]
 
     decision = ask_agent(event_with_deficit, RESOURCES)
     errors = validate_decision(decision, event_with_deficit)

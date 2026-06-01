@@ -83,41 +83,29 @@ def image_to_data_url(path: Path) -> str:
 
 
 def load_vlm_scenarios() -> list[dict]:
-    """Load all scenarios that involve VLM inspection."""
-    vlm_event_types = {
-        "instrument_out_of_zone",
-        "or_setup_state_change",
-        "room_turnover_check",
-        "ppe_compliance_check",
-        "sterile_zone_ambiguity",
-        "visually_ready_but_pathway_changed",
-    }
+    """Load all scenarios that have an image_path for VLM inspection."""
     scenarios = []
     for f in sorted(SCENARIOS_DIR.glob("*.json")):
         data = json.loads(f.read_text())
-        event_type = data.get("event_type", "")
-        has_vlm_q = "vlm_question" in data
-        low_conf = data.get("confidence", 1.0) < 0.80
-        if has_vlm_q or event_type in vlm_event_types or low_conf:
-            # Resolve question
-            question = data.get("vlm_question") or DEFAULT_QUESTIONS.get(f.stem) or DEFAULT_QUESTIONS.get(event_type, "Describe what you see in this image.")
-            # Resolve image
-            img_rel = data.get("image_path", "")
-            img_path = DATA_DIR / img_rel
-            if not img_path.is_file():
-                for ext in (".png", ".jpg", ".jpeg", ".webp"):
-                    candidate = img_path.with_suffix(ext)
-                    if candidate.is_file():
-                        img_path = candidate
-                        break
-            scenarios.append({
-                "name": f.stem,
-                "event_type": event_type,
-                "confidence": data.get("confidence"),
-                "question": question,
-                "image_path": img_path,
-                "has_image": img_path.is_file(),
-            })
+        img_rel = data.get("image_path", "")
+        if not img_rel:
+            continue
+        # Resolve question from scenario name
+        question = DEFAULT_QUESTIONS.get(f.stem, _STERILE_ZONE_Q)
+        # Resolve image
+        img_path = DATA_DIR / img_rel
+        if not img_path.is_file():
+            for ext in (".png", ".jpg", ".jpeg", ".webp"):
+                candidate = img_path.with_suffix(ext)
+                if candidate.is_file():
+                    img_path = candidate
+                    break
+        scenarios.append({
+            "name": f.stem,
+            "question": question,
+            "image_path": img_path,
+            "has_image": img_path.is_file(),
+        })
     return scenarios
 
 
@@ -270,8 +258,6 @@ def run_benchmark(models: list[str]):
 
     for i, sc in enumerate(scenarios, 1):
         print(f"─── [{i}/{len(scenarios)}] {sc['name']} ───")
-        print(f"  Event type : {sc['event_type']}")
-        print(f"  Confidence : {sc['confidence']}")
         print(f"  Image      : {sc['image_path'].name} ({'found' if sc['has_image'] else 'MISSING'})")
         print(f"  Question   : {sc['question'][:100]}{'…' if len(sc['question']) > 100 else ''}")
         print()
@@ -280,7 +266,7 @@ def run_benchmark(models: list[str]):
             print("  ⚠ Skipping — image not found\n")
             continue
 
-        row = {"scenario": sc["name"], "event_type": sc["event_type"], "question": sc["question"]}
+        row = {"scenario": sc["name"], "question": sc["question"]}
 
         for model in models:
             print(f"  [{model}] calling…", end=" ", flush=True)

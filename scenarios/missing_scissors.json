@@ -1,9 +1,5 @@
 {
-  "event_id": "evt-0001",
-  "room_id": "OR-2",
   "case_id": "CASE-1042",
-  "event_type": "or_setup_state_change",
-  "zone": "back_table",
-  "image_path": "frames/frame_missing_scissors.png",
-  "timestamp": "2026-05-15T12:00:00+02:00"
+  "room_id": "OR-2",
+  "image_path": "frames/frame_missing_scissors.png"
 }

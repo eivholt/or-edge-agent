@@ -1,26 +1,8 @@
-from datetime import datetime
-from typing import Literal
-
 from pydantic import BaseModel, Field
 
 
 class ORSceneEvent(BaseModel):
-    event_id: str = Field(pattern=r"^evt-\d+$")
-    room_id: str
     case_id: str
-    event_type: Literal[
-        "or_setup_state_change",
-        "visually_ready_but_pathway_changed",
-        "sterile_zone_ambiguity",
-        "instrument_out_of_zone",
-        "wrong_case_cart_candidate",
-        "room_turnover_check",
-        "ppe_compliance_check",
-    ]
+    room_id: str
+    image_path: str
     visible_items: dict[str, int] = Field(default_factory=dict)
-    missing_or_uncertain: list[str] = Field(default_factory=list)
-    zone: str
-    confidence: float = Field(default=1.0, ge=0.0, le=1.0)
-    image_path: str | None = None
-    vlm_hint: str | None = None
-    timestamp: datetime

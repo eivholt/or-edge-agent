@@ -1,9 +1,5 @@
 {
-  "event_id": "evt-0004",
-  "room_id": "OR-2",
   "case_id": "CASE-1042",
-  "event_type": "sterile_zone_ambiguity",
-  "zone": "back_table",
-  "image_path": "frames/frame_sterile_zone_ambiguity.png",
-  "timestamp": "2026-05-15T13:30:00+02:00"
+  "room_id": "OR-2",
+  "image_path": "frames/frame_sterile_zone_ambiguity.png"
 }

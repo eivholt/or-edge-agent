@@ -38,18 +38,12 @@ def test_vlm_identifies_instruments():
 
 # Event with low confidence triggers the agent to want visual verification
 EVENT_UNCERTAIN = {
-    "event_id": "evt-9050",
     "room_id": "OR-2",
     "case_id": "CASE-VLM",
-    "event_type": "sterile_zone_ambiguity",
     "visible_items": {
         "scalpel": 1,
         "scissors": 0,
     },
-    "missing_or_uncertain": ["scissors"],
-    "zone": "back_table",
-    "confidence": 0.82,
-    "timestamp": "2026-05-15T09:00:00+02:00",
     "image_path": "frames/frame_missing_scissors.png",
 }
 

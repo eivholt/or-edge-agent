@@ -3,11 +3,9 @@ from pathlib import Path
 
 
 REQUIRED_EVENT_KEYS = {
-    "event_id",
-    "room_id",
     "case_id",
-    "event_type",
-    "timestamp",
+    "room_id",
+    "image_path",
 }
 
 
