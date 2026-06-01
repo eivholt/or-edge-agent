@@ -30,13 +30,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "local-dev-key")
 EMR_BASE_URL = "http://localhost:9000"
 
 VLM_SYSTEM_PROMPT = (
-    "You are a surgical-scene analyst. Describe exactly what you see in the "
-    "image, then answer the user's question. Respond ONLY with JSON:\n"
-    '{"description": "one or two sentences", "answer": true/false}\n'
-    '"answer" is true when YES, false when NO. '
-    "If any instrument is touching, overlapping, or extending past the drape "
-    "edge, that counts as outside the sterile zone — answer true. "
-    "Base your answer strictly on what is visible — do not guess or assume."
+    "You are a surgical-scene analyst. Respond ONLY with JSON:\n"
+    '{"description": "...", "answer": true/false}\n'
+    "First describe the position of each instrument relative to the drape edge. "
+    "Then set \"answer\" to true ONLY if you can see an instrument resting on "
+    "the bare table beyond the drape. "
+    "If all instruments are on the drape, set \"answer\" to false."
 )
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
@@ -46,22 +45,24 @@ You are a local OR logistics agent (synthetic demo). Coordinate supply and revie
 WORKFLOW — always follow this order:
 1. Call get_case(case_id) to fetch the EMR case and required equipment.
 2. Call check_supplies() to compare detected items against requirements.
-3. Call inspect_scene to verify the sterile zone.
+3. Call inspect_scene to check the sterile zone (see its docstring for when to call).
    The image_path MUST be taken from the event's "image_path" field — do NOT invent a path.
-4. Call set_stacklight:
-   - red if the sterile zone has an issue (verdict=true from inspect_scene).
-   - yellow if ANY supply deficit was found, or the case has pending tasks / procedure change.
-   - green if all supplies are present, no pending tasks, AND the sterile zone is clear.
-5. If there were deficits from step 2:
-   - For EACH deficit item, call request_resupply.
-6. If the case has pending tasks or a procedure change, call create_task with task_type="human_review".
-7. Check inspect_scene's "verdict" field:
-   - verdict=true → sterile zone issue confirmed → call create_task with task_type="human_review".
-   - verdict=false → sterile zone is clear → do NOT create a human_review task for sterile reasons.
+4. Now take ALL applicable actions together:
+   a) Call set_stacklight:
+      - set red if inspect_scene verdict is true (sterile zone issue).
+      - set yellow if check_supplies shows deficits OR get_case returned open_items.
+      - set green ONLY when: no sterile issue, no deficits, AND open_items is empty.
+   b) If inspect_scene verdict is true, call create_task with task_type="human_review" for the sterile zone issue.
+   c) For EACH deficit item from check_supplies, call request_resupply.
+   d) If the case open_items list is non-empty, call create_task with task_type="human_review".
 
-IMPORTANT: Every run MUST include exactly one set_stacklight call.
-Never ask the user for input. Always decide and act autonomously.
-Your final text response must be a SHORT summary (2-4 sentences max)."""
+RULES:
+- open_items from get_case ALWAYS means yellow — never set green when open_items exist.
+- Deficits need request_resupply — never use create_task for a deficit item.
+- Do NOT create tasks based on missing_or_uncertain from the event. Only act on deficits from check_supplies and open_items from get_case.
+- Every run MUST include exactly one set_stacklight call.
+- Never ask the user for input. Always decide and act autonomously.
+- Your final text response must be a SHORT summary (2-4 sentences max)."""
 
 
 # ── Dependencies (passed via RunContext) ─────────────────────────────
@@ -144,6 +145,9 @@ def get_case(
     r = httpx.get(f"{EMR_BASE_URL}/cases/{case_id}", timeout=10)
     r.raise_for_status()
     case = r.json()
+    # Strip fields irrelevant to agent decisions to avoid 3B hallucinations
+    for key in ("porter_release_allowed", "patient_id", "phase", "priority"):
+        case.pop(key, None)
     ctx.deps.case = case
     ctx.deps.emit_tool_progress("get_case", ctx)
     if ctx.deps.emit:
@@ -311,7 +315,7 @@ def set_stacklight(
 
 
 STERILE_ZONE_QUESTION = (
-    "Are any sponge, scissors, tweezers, scalpel in any part outside the sterile drape boundary?"
+    "Are any sponge, scissors, tweezers, scalpel on the bare table outside the sterile drape?"
 )
 
 
@@ -322,6 +326,9 @@ def inspect_scene(
 ) -> dict:
     """Inspect the OR scene image for sterile zone violations.
 
+    Call this tool whenever at least one instrument was detected by the EI model
+    (i.e. visible_items is non-empty). Skip it only if no objects were detected.
+
     Sends the image to a VLM with a fixed sterile-zone question that covers
     all Edge Impulse instrument classes (sponge, scissors, tweezers, scalpel).
 
@@ -330,8 +337,8 @@ def inspect_scene(
       - "verdict": boolean — true means YES there IS an issue, false means NO issue found
 
     IMPORTANT — check the "verdict" field in the result:
-      verdict=true  → sterile zone issue exists → create human_review task
-      verdict=false → sterile zone is clear → do NOT create a human_review task
+      verdict=true  → sterile zone issue exists → set red light and create human_review task
+      verdict=false → sterile zone is clear → do NOT create a human_review task for sterile issues
 
     Args:
         image_path: Path to an image file (relative to data/ or absolute).
@@ -376,7 +383,17 @@ def _inspect_local(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, 
     if not mime_subtype:
         return {"error": f"unsupported image format: {suffix}"}
 
-    encoded = base64.b64encode(resolved.read_bytes()).decode()
+    # Upscale small images so the VLM can reason about spatial positions
+    from PIL import Image
+    import io
+    img = Image.open(resolved)
+    if img.width < 512 or img.height < 512:
+        img = img.resize((1024, 1024), Image.LANCZOS)
+        buf = io.BytesIO()
+        img.save(buf, format=mime_subtype.upper().replace("JPEG", "JPEG"))
+        encoded = base64.b64encode(buf.getvalue()).decode()
+    else:
+        encoded = base64.b64encode(resolved.read_bytes()).decode()
     data_url = f"data:image/{mime_subtype};base64,{encoded}"
 
     guided_json = {

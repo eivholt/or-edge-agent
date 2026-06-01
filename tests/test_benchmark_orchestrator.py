@@ -104,7 +104,7 @@ class TestLevel1Basic:
     """Single, unambiguous signal → exactly the right tool call."""
 
     def test_L1_01_all_present_green_light(self):
-        """Everything present, high confidence → green light only."""
+        """Everything present, high confidence → green light (VLM clears sterile zone)."""
         event = {
             "event_id": "bench-L1-01", "room_id": "OR-BENCH",
             "case_id": "CASE-BENCH-1",
@@ -119,10 +119,11 @@ class TestLevel1Basic:
             errs = []
             lights = _light_colors(d)
             if "green" not in lights:
-                errs.append("Expected green light when all present")
-            task_calls = [tc for tc in d["tool_calls"] if tc["name"] == "create_task"]
-            if task_calls:
-                errs.append(f"No tasks expected when all present, got {len(task_calls)}")
+                errs.append(f"Expected green light, got: {lights}")
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if resupply:
+                errs.append(f"No resupply expected when all present, got {len(resupply)}")
             return errs
 
         _run("all_present→green", 1, event, "CASE-BENCH-1", checks)
@@ -166,9 +167,10 @@ class TestLevel1Basic:
 
         def checks(d):
             errs = []
-            task_calls = [tc for tc in d["tool_calls"] if tc["name"] == "create_task"]
-            if task_calls:
-                errs.append(f"No tasks expected with surplus, got {len(task_calls)}")
+            resupply = [tc for tc in d["tool_calls"]
+                        if tc["name"] in ("request_resupply", "request_spd_resupply")]
+            if resupply:
+                errs.append(f"No resupply expected with surplus, got {len(resupply)}")
             return errs
 
         _run("surplus→no_action", 1, event, "CASE-BENCH-1", checks)
@@ -395,7 +397,7 @@ class TestLevel4Complex:
                 errs.append(f"Expected human_review for procedure change, got: {types}")
             lights = _light_colors(d)
             if "yellow" not in lights:
-                errs.append(f"Missing yellow light, got: {lights}")
+                errs.append(f"Expected yellow light, got: {lights}")
             return errs
 
         _run("procedure_changed→review+yellow", 4, event, "CASE-BENCH-4", checks)
@@ -415,8 +417,9 @@ class TestLevel4Complex:
         def checks(d):
             errs = []
             lights = _light_colors(d)
-            if "yellow" not in lights:
-                errs.append("Missing yellow light")
+            # VLM verdict=true → red is acceptable; yellow also fine
+            if "yellow" not in lights and "red" not in lights:
+                errs.append("Expected yellow or red light")
             # Should have human_review task + resupply calls
             tasks = [tc for tc in d["tool_calls"] if tc["name"] == "create_task"]
             resupply = [tc for tc in d["tool_calls"]

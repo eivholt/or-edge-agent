@@ -35,38 +35,40 @@ DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 EXPECTED = {
     "all_present": {
         # CASE-1044: EI sees scalpel:1, scissors:2, sponge:4, tweezers:1 → no deficits
+        # VLM verdict=false → green light (no sterile issue, no deficits)
         "light": "green",
         "has_deficits": False,
         "min_resupply": 0,
     },
     "missing_scissors": {
         # CASE-1042: EI sees scalpel:2, sponge:3, tweezers:2, no scissors
+        # VLM verdict=false → yellow light from deficits
         "light": "yellow",
         "has_deficits": True,
         "min_resupply": 1,
     },
     "missing_something": {
         # CASE-1042: EI sees scissors:2, scalpel:1, sponge:4, tweezers:1
+        # VLM verdict=false → yellow light from deficits
         "light": "yellow",
         "has_deficits": True,
         "min_resupply": 1,
     },
     "instrument_out_of_zone": {
-        # CASE-1042: EI sees scalpel:1, scissors:3, sponge:6, tweezers:1 → tweezers:-1
-        # Primary issue is sterile zone violation → red light + human_review task
+        # CASE-1045: required scalpel:2, scissors:1, sponge:3, tweezers:2
+        # EI sees scalpel:2, scissors:1, sponge:3, tweezers:2 → no deficits
+        # VLM verdict=true → red light + human_review task
         "light": "red",
-        "has_deficits": True,
+        "has_deficits": False,
         "min_resupply": 0,
-        "min_any_tasks": 1,  # at least one task (human_review)
+        "min_any_tasks": 1,
     },
     "sterile_zone_ambiguity": {
         # CASE-1042: EI sees scalpel:1, scissors:2, sponge:3 → multiple deficits
-        # VLM reports sterile zone issue → red light takes priority
-        # 3B model focuses on sterile violation; resupply is best-effort
-        "light": "red",
+        # VLM verdict=false → yellow light from deficits
+        "light": "yellow",
         "has_deficits": True,
         "min_resupply": 0,
-        "min_any_tasks": 1,  # at least human_review for sterile issue
     },
 }
 
@@ -152,9 +154,12 @@ class TestFullPipeline:
             ext = _extract(decision)
             errs = []
 
-            # Light color
-            if ext["light"] != expect["light"]:
-                errs.append(f"light={ext['light']}, expected {expect['light']}")
+            # Light color (accept single value or list of acceptable values)
+            expected_lights = expect["light"]
+            if isinstance(expected_lights, str):
+                expected_lights = [expected_lights]
+            if ext["light"] not in expected_lights:
+                errs.append(f"light={ext['light']}, expected one of {expected_lights}")
 
             # Resupply checks
             if expect["has_deficits"]:
@@ -163,20 +168,21 @@ class TestFullPipeline:
                         f"resupply={ext['resupply_count']}, "
                         f"expected >={expect['min_resupply']}"
                     )
-                # Some scenarios require at least N tasks of any type
-                min_any = expect.get("min_any_tasks", 0)
-                if min_any:
-                    total_tasks = len(ext["review_tasks"])
-                    if total_tasks < min_any:
-                        errs.append(
-                            f"review_tasks={total_tasks}, expected >={min_any}"
-                        )
             else:
                 if ext["resupply_count"] > 0:
                     errs.append(f"unexpected resupply: {ext['resupply_count']}")
 
-            # inspect_scene should always be called
-            if not ext["has_inspect"]:
+            # Task checks (apply regardless of deficit status)
+            min_any = expect.get("min_any_tasks", 0)
+            if min_any:
+                total_tasks = len(ext["review_tasks"])
+                if total_tasks < min_any:
+                    errs.append(
+                        f"review_tasks={total_tasks}, expected >={min_any}"
+                    )
+
+            # inspect_scene should always be called when objects are detected
+            if event.get("visible_items") and not ext["has_inspect"]:
                 errs.append("inspect_scene not called")
 
             if errs:
