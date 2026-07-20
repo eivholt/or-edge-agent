@@ -68,11 +68,11 @@ EXPECTED = {
     },
     "sterile_zone_ambiguity": {
         # CASE-1042: EI sees scalpel:1, scissors:2, sponge:3 → multiple deficits
-        # VLM verdict=false → yellow from deficits
-        "light": "yellow",
+        # Scissors cross the drape edge → red light + human_review task
+        "light": "red",
         "has_deficits": True,
         "min_resupply": 0,
-        "max_review_tasks": 0,  # deficits → resupply only, no create_task
+        "min_any_tasks": 1,
     },
 }
 

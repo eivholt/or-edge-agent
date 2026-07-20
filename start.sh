@@ -3,6 +3,7 @@
 # Usage:
 #   ./start.sh              Start all services (vLLM + EMR + Dashboard)
 #   ./start.sh llm          Start vLLM only
+#   ./start.sh app          Start EMR + Dashboard (model managed externally)
 #   ./start.sh emr          Start EMR API only
 #   ./start.sh dashboard    Start Dashboard only
 #   ./start.sh agent [file] Run agent fixture (default: missing_scissors)
@@ -77,6 +78,10 @@ wait_for_port() {
 
 open_browser() {
     local url=$1
+    if [[ "${OPEN_BROWSER:-1}" == "0" ]]; then
+        info "Dashboard: $url"
+        return
+    fi
     if command -v wslview &>/dev/null; then
         wslview "$url" 2>/dev/null &
     elif command -v xdg-open &>/dev/null; then
@@ -184,6 +189,10 @@ case "${1:-all}" in
     llm|vllm)
         start_llm
         ;;
+    app)
+        start_emr
+        start_dashboard
+        ;;
     emr)
         start_emr
         ;;
@@ -247,7 +256,7 @@ case "${1:-all}" in
         ok "Dashboard: ${DASH_URL}"
         ;;
     *)
-        echo "Usage: $0 {all|llm|emr|dashboard|agent [scenario]|stop|status}"
+        echo "Usage: $0 {all|llm|app|emr|dashboard|agent [scenario]|stop|status}"
         exit 1
         ;;
 esac

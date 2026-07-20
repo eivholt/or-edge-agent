@@ -11,7 +11,7 @@ from pathlib import Path
 
 import logfire
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.responses import StreamingResponse
 
 logfire.configure(service_name="or-edge-agent-dashboard")
@@ -111,6 +111,7 @@ async def get_config():
     return {
         "remote_vlm_model": os.getenv("AZURE_VLM_DEPLOYMENT", "claude-opus-4-7"),
         "local_vlm_model": os.getenv("VLM_MODEL", "ministral-3b"),
+        "agent_model": os.getenv("LLM_MODEL", os.getenv("VLM_MODEL", "ministral-3b")),
     }
 
 
@@ -180,16 +181,26 @@ def _emit(component: str, **kwargs):
 
 
 @app.post("/run/{scenario}")
-async def run_scenario(scenario: str, offline: str = ""):
+async def run_scenario(scenario: str, cloud: bool = False):
     """Run a scenario through the agent pipeline and stream events to SSE."""
     scenario_file = SCENARIOS_DIR / f"{scenario}.json"
     if not scenario_file.exists():
-        return {"error": f"Scenario {scenario} not found"}
+        return JSONResponse(
+            status_code=404,
+            content={"ok": False, "error": f"Scenario {scenario} not found"},
+        )
 
-    cloud_connected = not bool(offline)
+    cloud_connected = cloud
     loop = asyncio.get_event_loop()
-    await loop.run_in_executor(None, _run_pipeline, str(scenario_file), cloud_connected)
-    return {"ok": True}
+    result = await loop.run_in_executor(
+        None,
+        _run_pipeline,
+        str(scenario_file),
+        cloud_connected,
+    )
+    if not result["ok"]:
+        return JSONResponse(status_code=500, content=result)
+    return result
 
 
 def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
@@ -277,8 +288,10 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     try:
         decision = ask_agent(event, resources, emit=_emit)
     except Exception as exc:
-        _emit("agent", status="error", detail=f"Agent error: {exc}")
-        decision = {"decision_summary": f"Agent error: {exc}", "tool_calls": [], "llm_iterations": 0}
+        error = f"Agent error: {exc}"
+        _emit("agent", status="error", summary=error, detail=error)
+        _emit("validation", errors=[error], detail=error)
+        return {"ok": False, "error": error}
 
     tool_calls = decision.get("tool_calls", [])
     llm_iters = decision.get("llm_iterations", 0)
@@ -296,3 +309,6 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     _emit("validation",
           errors=errors,
           detail=f"{'Passed' if not errors else f'{len(errors)} error(s): ' + '; '.join(errors)}")
+    if errors:
+        return {"ok": False, "error": "; ".join(errors), "errors": errors}
+    return {"ok": True}

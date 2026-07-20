@@ -1,193 +1,65 @@
 # OR Edge Agent
 
-Operating-room edge intelligence agent: real-time instrument detection, reconciliation against the surgical pathway, and autonomous logistics actions (SPD resupply, prep-light control, task creation).
+An operating-room edge logistics demo that detects instruments, reconciles the
+scene with a synthetic surgical pathway, checks sterile-drape boundaries, and
+executes bounded logistics actions.
 
-## Quick Start
+The complete application runs on the Qualcomm IQ9 IQ9075 EVK:
 
-```bash
-source .venv/bin/activate
-./start.sh            # starts EMR (:9000), Dashboard (:8000), vLLM (:8081)
-./start.sh stop       # stops all services
-./start.sh status     # show running services
-```
+- Edge Impulse FOMO detector on AArch64
+- Ministral 3B Q4 text and tool model on the HTP through QAIRT Genie
+- Ministral 3B multimodal projector through `llama.cpp` on the CPU
+- Pydantic AI orchestration, synthetic EMR, and dashboard in Python 3.12
 
-## Edge Impulse Model Management
+See [IQ9_EVK.md](IQ9_EVK.md) for the tested device setup, service commands,
+validation steps, and troubleshooting notes.
 
-The object-detection model lives at `models/modelfile.eim` (Edge Impulse Linux Runner format).
+## Repository Setup
 
-**Important:** The `.eim` must be built as **float32** for accurate detection. An int8-quantized build will misclassify instruments (e.g. scalpels detected as tweezers) due to quantization loss in the FOMO architecture.
-
-### Download float32 model via API
-
-```bash
-export EI_API_KEY="ei_..."   # from EI Studio > project 371734 > Dashboard > Keys
-python scripts/download_float32_model.py
-```
-
-This script will:
-1. Trigger a **float32** `runner-linux-x86_64` build via the EI Studio API
-2. Poll until the build job completes (~1–3 min)
-3. Back up the current model as `models/modelfile.eim.int8.bak`
-4. Save the new float32 model to `models/modelfile.eim`
-
-**Project:** 371734 — "Surgery Inventory Synthetic NVIDIA"
-**Labels:** scalpel, scissors, sponge, tweezers
-**Input:** 320×320 RGB, FOMO (constrained object detection)
-**Confidence threshold:** 0.9 (set in `apps/detector/inference.py`)
-
-### Verify detection accuracy
+The detector runners are stored with Git LFS. Install LFS before checking out
+the repository so the model files are materialized rather than left as pointer
+files.
 
 ```bash
-python -c "
-from apps.detector.inference import detect_instruments
-result = detect_instruments('data/frames/frame_missing_scissors3.png')
-print(result)
-"
+git lfs install
+git lfs pull
+python3 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+.venv/bin/python -m pip install -e '.[test]'
+cp .env.example .env
 ```
 
-Expected float32 output should match EI Studio results (scalpel:2, scissors:2, sponge:4, tweezers:2 at ≥0.99 confidence).
+On x86-64, the detector uses `models/modelfile.eim`. On AArch64, it selects
+`models/modelfile.aarch64.eim`. Set `EI_MODEL_PATH` only when an explicit model
+override is needed.
 
----
+## Local Services
 
-## Dev Notes
+For a workstation with separately managed OpenAI-compatible model endpoints:
 
-ssh eivho@192.168.1.107 -p 2222
+```bash
+./start.sh app
+```
 
-uvicorn synthetic_emr.api:app --reload --port 9000
+This starts the synthetic EMR on port `9000` and dashboard on port `8000`.
+Configure the text and vision endpoints in `.env` before running a scenario.
 
+```bash
+python -m apps.agent.run_fixture scenarios/all_present.json
+```
 
-uv pip install \
-  --extra-index-url https://wheels.vllm.ai/0.20.2/cu129 \
-  vllm==0.20.2
+## Tests
 
-uv venv --python python3.12 .venv-vllm --seed
-source .venv-vllm/bin/activate
+```bash
+python -m pytest tests/ -m 'not llm' -q --tb=short
+python -m pytest tests/ -v --tb=short
+```
 
-uv pip install vllm --torch-backend=cu129
+The full suite requires the text model, multimodal model, and synthetic EMR.
+The IQ9 guide contains the exact tested endpoint configuration.
 
-python - <<'PY'
-import torch, vllm
-print(torch.__version__, torch.version.cuda)
-print(torch.cuda.get_device_name(0), torch.cuda.get_device_capability(0))
-print(vllm.__version__)
-PY
+## Safety Scope
 
-nvidia-smi
-
-vllm serve Qwen/Qwen2.5-7B-Instruct \
-  --host 0.0.0.0 \
-  --port 8000 \
-  --dtype auto \
-  --max-model-len 4096 \
-  --gpu-memory-utilization 0.70 \
-  --api-key local-dev-key
-  --enable-auto-tool-choice --tool-call-parser hermes
-
-  eivho@DESKTOP-OM4KVB3:~/repos/or-edge-agent$ source .venv/bin/activate
-
-  python - <<'PY'
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://localhost:8000/v1",
-    api_key="local-dev-key"
-)
-
-r = client.chat.completions.create(
-    model="Qwen/Qwen2.5-7B-Instruct",
-    messages=[
-        {"role": "system", "content": "Return only JSON."},
-        {"role": "user", "content": "Return {\"status\":\"ok\"}."}
-    ],
-    temperature=0
-)
-
-print(r.choices[0].message.content)
-PY
-
-
-eivho@DESKTOP-OM4KVB3:~/repos/or-edge-agent$ source .venv-vllm/bin/activate
-
-vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
-  --host 0.0.0.0 \
-  --port 8081 \
-  --gpu-memory-utilization 0.45 \
-  --limit-mm-per-prompt '{"image":1,"video":0}' \
-  --api-key local-dev-key
-
-
-  vllm serve Qwen/Qwen2.5-VL-7B-Instruct \
-  --host 0.0.0.0 \
-  --port 8081 \
-  --dtype auto \
-  --max-model-len 8192 \
-  --gpu-memory-utilization 0.9 \
-  --limit-mm-per-prompt '{"image":1,"video":0}' \
-  --allowed-local-media-path /home/eivho/repos-native/or-edge-agent/data \
-  --api-key local-dev-key
-
-
-  cd /home/eivho/repos-native/or-edge-agent && source .venv-vllm/bin/activate && vllm serve mistralai/Ministral-3-3B-Instruct-2512-BF16 --host 0.0.0.0 --port 8081 --dtype auto --max-model-len 4096 --gpu-memory-utilization 0.70 --enable-auto-tool-choice --tool-call-parser mistral 2>&1
-
-curl http://localhost:8081/v1/chat/completions \
-  -H "Authorization: Bearer local-dev-key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "Qwen/Qwen2.5-VL-7B-Instruct",
-    "messages": [
-      {
-        "role": "user",
-        "content": [
-          {
-            "type": "text",
-            "text": "Describe this image briefly."
-          },
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "file:///home/eivho/repos-native/or-edge-agent/data/surgery_tools_1024.jpg"
-            }
-          }
-        ]
-      }
-    ],
-    "max_tokens": 200
-  }'
-
-source .venv/bin/activate
-export TEXT_LLM_BASE_URL=http://localhost:8000/v1
-export TEXT_LLM_MODEL=Qwen/Qwen2.5-7B-Instruct
-export OPENAI_API_KEY=local-dev-key
-
-python apps/agent/run_fixture.py scenarios/missing_scissors.json
-
-
-ip addr
-
-netsh interface portproxy add v4tov4 `
-listenaddress=0.0.0.0 listenport=2222 `
-connectaddress=172.24.98.15 connectport=22
-
-sudo service ssh start
-sudo service ssh status
-
-sudo nvidia-ctk runtime configure --runtime=docker
-sudo systemctl restart docker
-
-Image prompts:
-
-1. Sterile Zone Ambiguity
-
-Top-down clinical photograph of a stainless-steel back table in an operating room, covered with a blue sterile drape. Surgical instruments (scalpel, scissors, sponges, tweezers) are laid out, but two instruments are partially hanging off the edge of the sterile drape, ambiguously straddling the boundary between sterile and non-sterile zones. Bright OR overhead lighting, slightly out-of-focus background. No people visible. DSLR, 35mm lens, ISO 400, clinical documentation style. No text, no watermarks, no logos. Stock photo style, editorial, for medical training simulation. 1:1 aspect ratio.
-
-2. Instrument Out of Zone
-
-Top-down clinical photograph of an operating room back table covered with a blue sterile surgical drape. Neatly arranged surgical instruments on the drape (scissors, sponges, tweezers). One stainless-steel scalpel is clearly placed 15 cm outside the drape boundary, sitting directly on the bare stainless-steel table surface. Sharp focus on the scalpel outside the drape. Bright overhead surgical lighting. DSLR, 35mm lens, ISO 400, clinical documentation style. No text, no watermarks, no logos. Stock photo style, editorial, for medical training simulation. 1:1 aspect ratio.
-
-3. Room Turnover Check
-
-Wide-angle clinical photograph of an operating room between procedures. The room is partially cleaned but a hospital gurney with rumpled white sheets is still parked in the corner. An IV pole with an empty fluid bag hangs nearby. The main surgical table is bare. Overhead OR lights are on. Floor shows wheel marks. The scene conveys an incomplete room turnover — previous patient equipment not yet removed. DSLR, 35mm lens, ISO 400, clinical documentation style. No text, no watermarks, no logos. Stock photo style, editorial, for medical training simulation. 1:1 aspect ratio.
-
-4. PPE Compliance Check
-
-Clinical photograph of an operating room instrument table from a ceiling-mounted camera angle. A person in blue surgical scrubs stands next to the sterile instrument table, wearing a surgical cap and gloves but conspicuously missing a surgical face mask — their nose and mouth are uncovered. Instruments are visible on the table. Bright surgical lighting, other masked staff blurred in the background. DSLR, 35mm lens, ISO 400, clinical documentation style. No text, no watermarks, no logos. Stock photo style, editorial, for medical training simulation. 1:1 aspect ratio.
+This repository uses synthetic records and scenes. It is an operational
+logistics demonstration, not clinical decision support, diagnosis, treatment,
+case clearance, or a real clinical alarm system.

@@ -1,6 +1,31 @@
 [project]
 name = "or-edge-agent"
 version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "anthropic>=0.75,<1",
+    "edge-impulse-linux==1.2.2",
+    "fastapi>=0.115,<1",
+    "httpx>=0.28,<1",
+    "logfire[fastapi,httpx]>=4.14,<5",
+    "numpy>=2.2,<3",
+    "opencv-python-headless>=4.10,<5",
+    "pillow>=11,<13",
+    "pydantic-ai-slim[openai]==1.107.1",
+    "python-dotenv>=1,<2",
+    "requests>=2.32,<3",
+    "uvicorn>=0.34,<1",
+]
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8,<10",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["apps*", "mcp_servers*", "synthetic_emr*"]
+namespaces = true
 
 [tool.pytest.ini_options]
 pythonpath = ["."]

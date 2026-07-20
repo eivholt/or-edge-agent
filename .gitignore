@@ -1,9 +1,11 @@
 .venv/
 __pycache__/
 *.pyc
+*.egg-info/
 logs/
 models/*
 !models/modelfile.eim
+!models/modelfile.aarch64.eim
 data/crops/
 data/detection/
 .env

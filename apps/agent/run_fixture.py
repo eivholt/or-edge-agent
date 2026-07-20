@@ -8,7 +8,7 @@ from typing import Literal
 import httpx
 import logfire
 from dotenv import load_dotenv
-from pydantic_ai import Agent, ModelSettings, RunContext, Tool
+from pydantic_ai import Agent, ModelRetry, ModelSettings, RunContext, Tool
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.profiles.openai import OpenAIModelProfile
 from pydantic_ai.providers.openai import OpenAIProvider
@@ -21,21 +21,23 @@ logfire.configure(service_name="or-edge-agent")
 logfire.instrument_pydantic_ai()
 logfire.instrument_httpx()
 
-VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8081/v1")
-# VLM_MODEL = os.getenv("VLM_MODEL", "Qwen/Qwen2.5-7B-Instruct")
-# VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512")
-VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512-BF16")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "local-dev-key")
-
-EMR_BASE_URL = "http://localhost:9000"
+VLM_BASE_URL = os.getenv("VLM_BASE_URL", "http://localhost:8081/v1")
+VLM_MODEL = os.getenv("VLM_MODEL", "mistralai/Ministral-3-3B-Instruct-2512-BF16")
+VLM_API_KEY = os.getenv("VLM_API_KEY", OPENAI_API_KEY)
+LLM_BASE_URL = os.getenv("LLM_BASE_URL", VLM_BASE_URL)
+LLM_MODEL = os.getenv("LLM_MODEL", VLM_MODEL)
+LLM_API_KEY = os.getenv("LLM_API_KEY", OPENAI_API_KEY)
+EMR_BASE_URL = os.getenv("EMR_BASE_URL", "http://localhost:9000")
+VLM_TIMEOUT_SECONDS = float(os.getenv("VLM_TIMEOUT_SECONDS", "180"))
+STERILE_GREEN_CONTEXT_THRESHOLD = float(
+    os.getenv("STERILE_GREEN_CONTEXT_THRESHOLD", "0.70")
+)
 
 VLM_SYSTEM_PROMPT = (
-    "You are a surgical-scene analyst. Respond ONLY with JSON:\n"
-    '{"description": "...", "answer": true/false}\n'
-    "First describe the position of each instrument relative to the drape edge. "
-    "Then set \"answer\" to true ONLY if you can see an instrument resting on "
-    "the bare table beyond the drape. "
-    "If all instruments are on the drape, set \"answer\" to false."
+    "You are a surgical-scene analyst. Respond ONLY with JSON: "
+    '{"answer": true/false}. Set "answer" to true if an instrument rests on '
+    "bare table outside or across the green sterile drape edge."
 )
 DATA_DIR = Path(__file__).resolve().parent.parent.parent / "data"
 
@@ -78,17 +80,25 @@ class AgentDeps:
     emit: object = None  # optional SSE callback: emit(component, **kwargs)
     _tool_count: int = 0  # tracks tool calls for iteration progress
     _tools_used: list = None  # names of tools called so far
+    resupplied_items: list = None
+    stacklight_colors: list = None
+    review_task_count: int = 0
+    sterile_verdict: bool | None = None
 
     def __post_init__(self):
         if self._tools_used is None:
             self._tools_used = []
+        if self.resupplied_items is None:
+            self.resupplied_items = []
+        if self.stacklight_colors is None:
+            self.stacklight_colors = []
 
     _tool_display_names = {
         "create_task": "create task",
         "set_stacklight": "set stacklight",
     }
 
-    _MAX_CONTEXT = 8192  # Ministral 3B context window
+    _MAX_CONTEXT = int(os.getenv("LLM_MAX_CONTEXT", "8192"))
     _prev_cumulative_input: int = 0  # for computing per-request input
 
     def emit_tool_progress(self, tool_name: str, ctx=None):
@@ -115,8 +125,8 @@ class AgentDeps:
 # ── Agent ────────────────────────────────────────────────────────────
 
 _model = OpenAIChatModel(
-    VLM_MODEL,
-    provider=OpenAIProvider(base_url=VLM_BASE_URL, api_key=OPENAI_API_KEY),
+    LLM_MODEL,
+    provider=OpenAIProvider(base_url=LLM_BASE_URL, api_key=LLM_API_KEY),
     profile=OpenAIModelProfile(openai_supports_strict_tool_definition=False),
 )
 
@@ -125,7 +135,60 @@ or_agent = Agent(
     instructions=INSTRUCTIONS,
     deps_type=AgentDeps,
     model_settings=ModelSettings(temperature=0, max_tokens=1024),
+    retries={"output": 3},
 )
+
+
+def _expected_stacklight_color(deps: AgentDeps) -> str:
+    deficits = deps.reconciliation.get("deficits", []) if deps.reconciliation else []
+    if deps.sterile_verdict is True:
+        return "red"
+    if deficits:
+        return "yellow"
+    return "green"
+
+
+@or_agent.output_validator
+def validate_agent_completion(ctx: RunContext[AgentDeps], output: str) -> str:
+    """Keep hard workflow completion rules outside the language model."""
+    missing_actions = []
+    reconciliation = ctx.deps.reconciliation
+    if ctx.deps.case is None:
+        missing_actions.append("call get_case")
+    if reconciliation is None:
+        missing_actions.append("call check_supplies")
+
+    deficits = reconciliation.get("deficits", []) if reconciliation else []
+    for deficit in deficits:
+        if deficit["item"] not in ctx.deps.resupplied_items:
+            missing_actions.append(
+                f'call request_resupply for {deficit["item"]}'
+            )
+
+    has_visible_items = bool(ctx.deps.event.get("visible_items"))
+    if has_visible_items and ctx.deps.sterile_verdict is None:
+        missing_actions.append("call inspect_scene")
+
+    if ctx.deps.sterile_verdict is True and ctx.deps.review_task_count != 1:
+        missing_actions.append("call create_task once with task_type human_review")
+
+    expected_color = _expected_stacklight_color(ctx.deps)
+    if ctx.deps.stacklight_colors != [expected_color]:
+        if not ctx.deps.stacklight_colors:
+            missing_actions.append(f"call set_stacklight once with color {expected_color}")
+        else:
+            missing_actions.append(
+                f"use exactly one set_stacklight call with color {expected_color}; "
+                f"colors already used: {ctx.deps.stacklight_colors}"
+            )
+
+    if missing_actions:
+        raise ModelRetry(
+            "The workflow is incomplete. Before finishing, "
+            + "; ".join(missing_actions)
+            + ". Do not repeat tools that already succeeded."
+        )
+    return output
 
 
 # ── Tools (dynamically discoverable via native tool calling) ─────────
@@ -224,6 +287,13 @@ def create_task(
         summary: Short description of what needs review.
         reason: Why this task is being created.
     """
+    if task_type == "human_review" and ctx.deps.review_task_count:
+        return {
+            "status": "ignored_duplicate",
+            "task_type": task_type,
+            "reason": "A human review task was already created for this run.",
+        }
+
     result = {
         "status": "created",
         "case_id": case_id,
@@ -232,6 +302,8 @@ def create_task(
         "summary": summary,
         "reason": reason,
     }
+    if task_type == "human_review":
+        ctx.deps.review_task_count += 1
     ctx.deps.emit_tool_progress("create_task", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
@@ -261,6 +333,13 @@ def request_resupply(
         room_id: The OR room identifier.
         urgency: One of low, normal, high.
     """
+    if item_name in ctx.deps.resupplied_items:
+        return {
+            "status": "ignored_duplicate",
+            "item_name": item_name,
+            "reason": "This item was already requested for this run.",
+        }
+
     result = {
         "request_id": f"SPD-{item_name}-{room_id}",
         "item_name": item_name,
@@ -268,6 +347,7 @@ def request_resupply(
         "urgency": urgency,
         "status": "requested",
     }
+    ctx.deps.resupplied_items.append(item_name)
     ctx.deps.emit_tool_progress("request_resupply", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
@@ -299,12 +379,25 @@ def set_stacklight(
         color: One of green, yellow, red.
         reason: Short explanation of why this color was chosen.
     """
+    if ctx.deps.stacklight_colors:
+        return {
+            "status": "ignored_duplicate",
+            "color": ctx.deps.stacklight_colors[0],
+            "reason": "The stacklight was already set for this run.",
+        }
+
+    requested_color = color
+    color = _expected_stacklight_color(ctx.deps)
     result = {
         "room_id": room_id,
         "color": color,
         "reason": reason,
         "status": "set",
     }
+    if requested_color != color:
+        result["requested_color"] = requested_color
+        result["policy_enforced"] = True
+    ctx.deps.stacklight_colors.append(color)
     ctx.deps.emit_tool_progress("set_stacklight", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
@@ -349,6 +442,16 @@ def inspect_scene(
         image_path: Path to an image file (relative to data/ or absolute).
     """
 
+    if not ctx.deps.event.get("visible_items"):
+        ctx.deps.sterile_verdict = False
+        return {
+            "image": image_path,
+            "question": STERILE_ZONE_QUESTION,
+            "answer": "Skipped because no instruments were detected.",
+            "verdict": False,
+            "skipped": True,
+        }
+
     question = STERILE_ZONE_QUESTION
 
     resolved = Path(image_path)
@@ -373,6 +476,7 @@ def inspect_scene(
     else:
         result = _inspect_local(ctx, resolved, image_path, question)
 
+    ctx.deps.sterile_verdict = result.get("verdict")
     return result
 
 
@@ -382,39 +486,93 @@ def _inspect_local(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, 
     if ctx.deps.emit:
         ctx.deps.emit("vlm_local", question=question, detail="Local VLM: working\u2026")
 
+    from apps.detector.inference import detect
+
+    detection_result = detect(resolved)
+    detector_available = bool(detection_result.model_name)
+    candidates = [
+        detection
+        for detection in detection_result.detections
+        if detection.green_context_fraction < STERILE_GREEN_CONTEXT_THRESHOLD
+    ]
+    candidate_details = [
+        {
+            "label": detection.label,
+            "green_context_fraction": round(detection.green_context_fraction, 3),
+        }
+        for detection in candidates
+    ]
+
+    if detector_available and not candidates:
+        result = {
+            "image": str(resolved),
+            "question": question,
+            "answer": "All detected instruments are surrounded by the green drape.",
+            "verdict": False,
+            "vlm_skipped": True,
+            "candidates": [],
+        }
+        if ctx.deps.emit:
+            ctx.deps.emit(
+                "tool_call",
+                tool_name="inspect_scene",
+                tool_args={"image_path": image_path, "question": question},
+                tool_result=result,
+                detail="inspect_scene (local): no off-drape candidates",
+            )
+            ctx.deps.emit(
+                "vlm_local",
+                question=question,
+                answer=result["answer"],
+                verdict=False,
+                detail="Local VLM skipped: no off-drape candidates",
+            )
+        return result
+
     suffix = resolved.suffix.lower().lstrip(".")
     mime_map = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}
     mime_subtype = mime_map.get(suffix)
     if not mime_subtype:
         return {"error": f"unsupported image format: {suffix}"}
 
-    # Upscale small images so the VLM can reason about spatial positions
     from PIL import Image
     import io
     img = Image.open(resolved)
-    if img.width < 512 or img.height < 512:
+    if candidates and detection_result.frame_height:
+        scale_y = img.height / detection_result.frame_height
+        candidate_centers = [
+            (detection.y + detection.height / 2) * scale_y
+            for detection in candidates
+        ]
+        upper_margin = max(128, int(img.height * 0.19))
+        lower_margin = max(128, int(img.height * 0.23))
+        crop_top = max(0, int(min(candidate_centers) - upper_margin))
+        crop_bottom = min(img.height, int(max(candidate_centers) + lower_margin))
+        img = img.crop((0, crop_top, img.width, crop_bottom))
+        question = (
+            "This crop shows the lower edge of a green sterile drape and nearby "
+            "table. Is any surgical instrument resting on the bare metal outside "
+            "the green drape?"
+        )
+    elif img.width < 512 or img.height < 512:
         img = img.resize((1024, 1024), Image.LANCZOS)
+
+    if img is not None:
         buf = io.BytesIO()
         img.save(buf, format=mime_subtype.upper().replace("JPEG", "JPEG"))
         encoded = base64.b64encode(buf.getvalue()).decode()
-    else:
-        encoded = base64.b64encode(resolved.read_bytes()).decode()
     data_url = f"data:image/{mime_subtype};base64,{encoded}"
 
     guided_json = {
         "type": "object",
-        "properties": {
-            "description": {"type": "string"},
-            "answer": {"type": "boolean"},
-        },
-        "required": ["description", "answer"],
+        "properties": {"answer": {"type": "boolean"}},
+        "required": ["answer"],
         "additionalProperties": False,
     }
 
     payload = {
         "model": VLM_MODEL,
         "messages": [
-            {"role": "system", "content": VLM_SYSTEM_PROMPT},
             {
                 "role": "user",
                 "content": [
@@ -423,7 +581,7 @@ def _inspect_local(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, 
                 ],
             }
         ],
-        "max_tokens": 512,
+        "max_tokens": 16,
         "temperature": 0,
         "response_format": {
             "type": "json_schema",
@@ -435,25 +593,49 @@ def _inspect_local(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, 
         },
     }
 
-    r = httpx.post(
-        f"{VLM_BASE_URL}/chat/completions",
-        json=payload,
-        headers={
-            "Authorization": f"Bearer {OPENAI_API_KEY}",
-            "Content-Type": "application/json",
-        },
-        timeout=60,
-    )
-    r.raise_for_status()
-    raw = r.json()["choices"][0]["message"]["content"]
+    vlm_error = None
     try:
+        response = httpx.post(
+            f"{VLM_BASE_URL}/chat/completions",
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {VLM_API_KEY}",
+                "Content-Type": "application/json",
+            },
+            timeout=VLM_TIMEOUT_SECONDS,
+        )
+        response.raise_for_status()
+        raw = response.json()["choices"][0]["message"]["content"]
         parsed = json.loads(raw)
-        answer = parsed.get("description", raw)
-        verdict = parsed.get("answer")
-    except (json.JSONDecodeError, AttributeError):
-        answer = raw
-        verdict = None
-    result = {"image": str(resolved), "question": question, "answer": answer, "verdict": verdict}
+        vlm_verdict = parsed.get("answer")
+    except (httpx.HTTPError, json.JSONDecodeError, AttributeError, KeyError) as exc:
+        if not candidates:
+            raise
+        vlm_verdict = None
+        vlm_error = f"{type(exc).__name__}: {exc}"
+
+    verdict = bool(candidates) or vlm_verdict
+    if candidates:
+        labels = ", ".join(sorted({candidate["label"] for candidate in candidate_details}))
+        confirmation = (
+            f"local VLM answered {str(vlm_verdict).lower()}"
+            if vlm_verdict is not None
+            else "local VLM confirmation was unavailable"
+        )
+        answer = f"Detector found off-drape context around {labels}; {confirmation}."
+    else:
+        answer = f"Local VLM answered {str(vlm_verdict).lower()}."
+
+    result = {
+        "image": str(resolved),
+        "question": question,
+        "answer": answer,
+        "verdict": verdict,
+        "vlm_verdict": vlm_verdict,
+        "candidates": candidate_details,
+    }
+    if vlm_error:
+        result["vlm_error"] = vlm_error
     if ctx.deps.emit:
         ctx.deps.emit("tool_call",
                       tool_name="inspect_scene",
@@ -561,18 +743,15 @@ def ask_agent(event: dict, resources: dict, emit=None) -> dict:
     )
     result = or_agent.run_sync(prompt, deps=deps)
 
-    # Extract tool calls and their results from the run result
+    # Extract tool calls and match results in message order. Some local model
+    # adapters reuse tool_call_id values across turns.
     tool_calls = []
-    tool_results = {}  # tool_call_id → result content
+    pending_calls = {}
     for msg in result.all_messages():
         if hasattr(msg, "parts"):
             for part in msg.parts:
-                if getattr(part, "part_kind", "") == "tool-return":
-                    tool_results[part.tool_call_id] = part.content
-    for msg in result.all_messages():
-        if hasattr(msg, "parts"):
-            for part in msg.parts:
-                if getattr(part, "part_kind", "") == "tool-call":
+                part_kind = getattr(part, "part_kind", "")
+                if part_kind == "tool-call":
                     call_id = part.tool_call_id
                     tc = {
                         "name": part.tool_name,
@@ -582,9 +761,29 @@ def ask_agent(event: dict, resources: dict, emit=None) -> dict:
                             else {}
                         ),
                     }
-                    if call_id and call_id in tool_results:
-                        tc["result"] = tool_results[call_id]
                     tool_calls.append(tc)
+                    if call_id:
+                        pending_calls.setdefault(call_id, []).append(tc)
+                elif part_kind == "tool-return":
+                    waiting = pending_calls.get(part.tool_call_id, [])
+                    if waiting:
+                        waiting.pop(0)["result"] = part.content
+
+    tool_calls = [
+        tool_call
+        for tool_call in tool_calls
+        if not (
+            isinstance(tool_call.get("result"), dict)
+            and tool_call["result"].get("status") == "ignored_duplicate"
+        )
+    ]
+    for tool_call in tool_calls:
+        result_content = tool_call.get("result")
+        if tool_call["name"] == "set_stacklight" and isinstance(result_content, dict):
+            tool_call["arguments"] = {
+                **tool_call["arguments"],
+                "color": result_content["color"],
+            }
 
     has_human_review = any(
         tc["arguments"].get("task_type") == "human_review"
@@ -599,7 +798,7 @@ def ask_agent(event: dict, resources: dict, emit=None) -> dict:
     )
 
     # Collect per-iteration token usage for context gauge
-    usage_total = result.usage()
+    usage_total = result.usage
     context_usage = {
         "input_tokens": usage_total.input_tokens,
         "output_tokens": usage_total.output_tokens,

@@ -4,30 +4,66 @@
 Usage:
     export EI_API_KEY="ei_abc123..."   # Your project API key from EI Studio > Dashboard > Keys
     python scripts/download_float32_model.py
+    python scripts/download_float32_model.py --target runner-linux-aarch64
 
 This will:
-  1. Trigger a float32 Linux x86_64 runner build for project 371734
+  1. Trigger a float32 Linux runner build for project 371734
   2. Poll until the build job completes
-  3. Download the .eim file to models/modelfile.eim (backing up the old one)
+  3. Download the architecture-specific .eim file under models/
 """
 
+import argparse
 import os
+import platform
 import sys
 import time
 import shutil
 import zipfile
 import tempfile
+from pathlib import Path
+
 import requests
 
 PROJECT_ID = 371734
 API_BASE = "https://studio.edgeimpulse.com/v1"
-DEPLOY_TARGET = "runner-linux-x86_64"  # Linux x86_64 runner
 MODEL_TYPE = "float32"
 ENGINE = "tflite"  # NOT tflite-eon — EON Compiler is incompatible with Linux runner's full TFLite
-OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "..", "models", "modelfile.eim")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+
+
+def default_target(machine: str | None = None) -> str:
+    architecture = (machine or platform.machine()).lower()
+    if architecture in {"aarch64", "arm64"}:
+        return "runner-linux-aarch64"
+    return "runner-linux-x86_64"
+
+
+def default_output(target: str) -> Path:
+    filename = (
+        "modelfile.aarch64.eim"
+        if target == "runner-linux-aarch64"
+        else "modelfile.eim"
+    )
+    return ROOT_DIR / "models" / filename
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--target",
+        default=default_target(),
+        help="Edge Impulse deployment target (default: host Linux architecture)",
+    )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="Output .eim path (default: architecture-specific path under models/)",
+    )
+    return parser.parse_args()
 
 
 def main():
+    args = parse_args()
     api_key = os.environ.get("EI_API_KEY")
     if not api_key:
         print("ERROR: Set EI_API_KEY environment variable first.")
@@ -40,11 +76,13 @@ def main():
         "Content-Type": "application/json",
     }
 
-    output = os.path.abspath(OUTPUT_PATH)
+    deploy_target = args.target
+    output = (args.output or default_output(deploy_target)).expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
 
     # Step 1: Trigger build
-    print(f"Building {MODEL_TYPE} model for {DEPLOY_TARGET}...")
-    build_url = f"{API_BASE}/api/{PROJECT_ID}/jobs/build-ondevice-model?type={DEPLOY_TARGET}"
+    print(f"Building {MODEL_TYPE} model for {deploy_target}...")
+    build_url = f"{API_BASE}/api/{PROJECT_ID}/jobs/build-ondevice-model?type={deploy_target}"
     build_body = {
         "engine": ENGINE,
         "modelType": MODEL_TYPE,
@@ -113,8 +151,8 @@ def main():
                 if eim_files:
                     eim_name = eim_files[0]
                     # Backup old model
-                    if os.path.exists(output):
-                        backup = output + ".int8.bak"
+                    if output.exists():
+                        backup = output.with_suffix(output.suffix + ".bak")
                         print(f"  Backing up old model to {backup}")
                         shutil.copy2(output, backup)
                     # Extract
@@ -128,8 +166,8 @@ def main():
         else:
             # Might be a raw binary
             print("  Download is not a ZIP, treating as raw .eim...")
-            if os.path.exists(output):
-                backup = output + ".int8.bak"
+            if output.exists():
+                backup = output.with_suffix(output.suffix + ".bak")
                 print(f"  Backing up old model to {backup}")
                 shutil.copy2(output, backup)
             shutil.move(tmp_path, output)
@@ -142,7 +180,7 @@ def main():
 
     print("\nDone! Float32 model downloaded.")
     print("Run the detection test to verify:")
-    print("  python -c \"from apps.detector.inference import detect_instruments; print(detect_instruments('data/frames/frame_missing_scissors3.png'))\"")
+    print("  python -c \"from apps.detector.inference import detect; print(detect('data/frames/frame_missing_scissors3.png'))\"")
 
 
 if __name__ == "__main__":

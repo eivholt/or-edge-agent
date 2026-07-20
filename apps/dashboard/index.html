@@ -1490,10 +1490,10 @@ async function runScenario(name) {
   const btns = document.querySelectorAll('.scenario-btn');
   btns.forEach(b => b.classList.add('running'));
   try {
-    const offline = offlineToggle.checked ? '?offline=1' : '';
-    const r = await fetch('/run/' + encodeURIComponent(name) + offline, { method: 'POST' });
+    const cloud = offlineToggle.checked ? '' : '?cloud=1';
+    const r = await fetch('/run/' + encodeURIComponent(name) + cloud, { method: 'POST' });
     const data = await r.json();
-    if (data.error) alert('Error: ' + data.error);
+    if (!r.ok || data.error) alert('Error: ' + (data.error || r.statusText));
   } catch (e) { alert('Failed: ' + e.message); }
   finally { setTimeout(() => btns.forEach(b => b.classList.remove('running')), 1000); }
 }
