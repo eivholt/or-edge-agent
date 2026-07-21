@@ -34,6 +34,35 @@ def _ctx(events):
     return SimpleNamespace(deps=deps)
 
 
+@pytest.mark.parametrize(
+    ("cloud_connected", "expected_backend"),
+    [(True, "remote"), (False, "local")],
+)
+def test_inspect_scene_uses_exactly_one_backend(
+    monkeypatch, cloud_connected, expected_backend
+):
+    calls = []
+    events = []
+    ctx = _ctx(events)
+    ctx.deps.resources["cloud_connected"] = cloud_connected
+
+    def inspect(backend):
+        def fake_inspect(*_):
+            calls.append(backend)
+            return {"verdict": False}
+
+        return fake_inspect
+
+    monkeypatch.setattr(run_fixture, "_inspect_remote", inspect("remote"))
+    monkeypatch.setattr(run_fixture, "_inspect_local", inspect("local"))
+
+    result = run_fixture.inspect_scene.function(ctx, str(FRAME_PATH.resolve()))
+
+    assert result == {"verdict": False}
+    assert calls == [expected_backend]
+    assert ctx.deps.sterile_verdict is False
+
+
 def test_local_vlm_processes_each_centroid_and_aggregates_progress(
     monkeypatch, tmp_path
 ):

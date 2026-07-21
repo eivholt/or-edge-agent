@@ -109,7 +109,7 @@ async def get_config():
     from dotenv import load_dotenv
     load_dotenv(override=True)
     return {
-        "remote_vlm_model": os.getenv("AZURE_VLM_DEPLOYMENT", "claude-opus-4-7"),
+        "remote_vlm_model": os.getenv("AZURE_VLM_DEPLOYMENT", "gpt-5.6-sol"),
         "local_vlm_model": os.getenv("VLM_MODEL", "ministral-3b"),
         "agent_model": os.getenv("LLM_MODEL", os.getenv("VLM_MODEL", "ministral-3b")),
     }

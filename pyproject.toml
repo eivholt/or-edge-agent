@@ -3,7 +3,6 @@ name = "or-edge-agent"
 version = "0.1.0"
 requires-python = ">=3.12"
 dependencies = [
-    "anthropic>=0.75,<1",
     "edge-impulse-linux==1.2.2",
     "fastapi>=0.115,<1",
     "httpx>=0.28,<1",
