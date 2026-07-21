@@ -12,7 +12,7 @@ surgery, compares the instruments it can see with a synthetic case record, and
 requests operational follow-up when supplies are missing or an instrument may
 be outside the sterile work area.
 
-![Prepared camera frame showing instruments on and beside a green sterile drape](resources/frame_sterile_zone_ambiguity.png)
+<img alt="Prepared camera frame showing instruments on and beside a green sterile drape" src="resources/frame_sterile_zone_ambiguity.png" width="50%">
 
 The **sterile drape** is the green covering
 that defines the clean work surface around a patient. An instrument beyond its
