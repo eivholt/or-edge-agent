@@ -45,6 +45,8 @@ def test_pipeline_marks_agent_exception_as_failure(monkeypatch, tmp_path):
     def fail_agent(*args, **kwargs):
         raise RuntimeError("model unavailable")
 
+    elapsed = iter([10.0, 11.0, 13.0, 14.0])
+    monkeypatch.setattr(server.time, "perf_counter", lambda: next(elapsed))
     monkeypatch.setattr("apps.agent.run_fixture.ask_agent", fail_agent)
     monkeypatch.setattr(
         server,
@@ -61,8 +63,10 @@ def test_pipeline_marks_agent_exception_as_failure(monkeypatch, tmp_path):
         "thinking",
         "error",
     ]
+    assert events[-2]["duration_ms"] == 2000
     assert events[-1] == {
         "component": "validation",
         "errors": ["Agent error: model unavailable"],
         "detail": "Agent error: model unavailable",
+        "total_duration_ms": 4000,
     }

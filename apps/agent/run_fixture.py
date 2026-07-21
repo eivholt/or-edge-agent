@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -29,10 +30,9 @@ LLM_BASE_URL = os.getenv("LLM_BASE_URL", VLM_BASE_URL)
 LLM_MODEL = os.getenv("LLM_MODEL", VLM_MODEL)
 LLM_API_KEY = os.getenv("LLM_API_KEY", OPENAI_API_KEY)
 EMR_BASE_URL = os.getenv("EMR_BASE_URL", "http://localhost:9000")
-VLM_TIMEOUT_SECONDS = float(os.getenv("VLM_TIMEOUT_SECONDS", "180"))
-STERILE_GREEN_CONTEXT_THRESHOLD = float(
-    os.getenv("STERILE_GREEN_CONTEXT_THRESHOLD", "0.70")
-)
+VLM_TIMEOUT_SECONDS = float(os.getenv("VLM_TIMEOUT_SECONDS", "600"))
+VLM_SEGMENT_RADIUS = int(os.getenv("VLM_SEGMENT_RADIUS", "64"))
+VLM_SEGMENT_IMAGE_SIZE = int(os.getenv("VLM_SEGMENT_IMAGE_SIZE", "224"))
 
 VLM_SYSTEM_PROMPT = (
     "You are a surgical-scene analyst. Respond ONLY with JSON: "
@@ -206,6 +206,7 @@ def get_case(
     Args:
         case_id: The surgical case identifier (e.g. CASE-1042).
     """
+    started = time.perf_counter()
     r = httpx.get(f"{EMR_BASE_URL}/cases/{case_id}", timeout=10)
     r.raise_for_status()
     case = r.json()
@@ -224,6 +225,7 @@ def get_case(
                       case_id=case_id,
                       procedure=case.get("procedure", ""),
                       required_items=case.get("required_items", {}),
+                      duration_ms=(time.perf_counter() - started) * 1000,
                       detail=f"Fetched case {case_id}: {case.get('procedure', '?')}")
     return case
 
@@ -241,6 +243,7 @@ def check_supplies(
     case = ctx.deps.case
     if case is None:
         return {"error": "No case data — call get_case first."}
+    started = time.perf_counter()
     recon = reconcile_setup(event, case)
     ctx.deps.reconciliation = recon
     ctx.deps.emit_tool_progress("check_supplies", ctx)
@@ -254,6 +257,7 @@ def check_supplies(
                       all_present=recon["all_present"],
                       actionable_missing=[f"{d['item']} ({d['have']}/{d['need']})" for d in recon.get("deficits", [])],
                       unaccounted=[],
+                      duration_ms=(time.perf_counter() - started) * 1000,
                       detail=_reconcile_detail(recon))
     return recon
 
@@ -413,7 +417,10 @@ def set_stacklight(
 
 
 STERILE_ZONE_QUESTION = (
-    "Are any sponge, scissors, tweezers, scalpel on the bare table outside the sterile drape?"
+    "Inspect the entire image, including its edges. The green or turquoise cloth "
+    "is the sterile drape; exposed gray or silver metal is outside it. Is any "
+    "scissors, scalpel, tweezers, or white gauze sponge resting partly or entirely "
+    "on exposed metal outside the green cloth?"
 )
 
 
@@ -481,87 +488,33 @@ def inspect_scene(
 
 
 def _inspect_local(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, question: str) -> dict:
-    """Run VLM inspection via the local Ministral 3B model."""
+    """Inspect detector-centered image segments with local Ministral 3B."""
+    started = time.perf_counter()
     ctx.deps.emit_tool_progress("inspect_scene_local", ctx)
-    if ctx.deps.emit:
-        ctx.deps.emit("vlm_local", question=question, detail="Local VLM: working\u2026")
 
-    from apps.detector.inference import detect
+    detections = ctx.deps.resources.get("_scene_detections")
+    if not detections:
+        from apps.detector.inference import detect
 
-    detection_result = detect(resolved)
-    detector_available = bool(detection_result.model_name)
-    candidates = [
-        detection
-        for detection in detection_result.detections
-        if detection.green_context_fraction < STERILE_GREEN_CONTEXT_THRESHOLD
-    ]
-    candidate_details = [
-        {
-            "label": detection.label,
-            "green_context_fraction": round(detection.green_context_fraction, 3),
+        detection_result = detect(resolved)
+        detections = {
+            "frame_width": detection_result.frame_width,
+            "frame_height": detection_result.frame_height,
+            "items": [
+                {
+                    "label": detection.label,
+                    "x": detection.x,
+                    "y": detection.y,
+                    "width": detection.width,
+                    "height": detection.height,
+                }
+                for detection in detection_result.detections
+            ],
         }
-        for detection in candidates
-    ]
 
-    if detector_available and not candidates:
-        result = {
-            "image": str(resolved),
-            "question": question,
-            "answer": "All detected instruments are surrounded by the green drape.",
-            "verdict": False,
-            "vlm_skipped": True,
-            "candidates": [],
-        }
-        if ctx.deps.emit:
-            ctx.deps.emit(
-                "tool_call",
-                tool_name="inspect_scene",
-                tool_args={"image_path": image_path, "question": question},
-                tool_result=result,
-                detail="inspect_scene (local): no off-drape candidates",
-            )
-            ctx.deps.emit(
-                "vlm_local",
-                question=question,
-                answer=result["answer"],
-                verdict=False,
-                detail="Local VLM skipped: no off-drape candidates",
-            )
-        return result
-
-    suffix = resolved.suffix.lower().lstrip(".")
-    mime_map = {"jpg": "jpeg", "jpeg": "jpeg", "png": "png", "webp": "webp"}
-    mime_subtype = mime_map.get(suffix)
-    if not mime_subtype:
-        return {"error": f"unsupported image format: {suffix}"}
-
-    from PIL import Image
-    import io
-    img = Image.open(resolved)
-    if candidates and detection_result.frame_height:
-        scale_y = img.height / detection_result.frame_height
-        candidate_centers = [
-            (detection.y + detection.height / 2) * scale_y
-            for detection in candidates
-        ]
-        upper_margin = max(128, int(img.height * 0.19))
-        lower_margin = max(128, int(img.height * 0.23))
-        crop_top = max(0, int(min(candidate_centers) - upper_margin))
-        crop_bottom = min(img.height, int(max(candidate_centers) + lower_margin))
-        img = img.crop((0, crop_top, img.width, crop_bottom))
-        question = (
-            "This crop shows the lower edge of a green sterile drape and nearby "
-            "table. Is any surgical instrument resting on the bare metal outside "
-            "the green drape?"
-        )
-    elif img.width < 512 or img.height < 512:
-        img = img.resize((1024, 1024), Image.LANCZOS)
-
-    if img is not None:
-        buf = io.BytesIO()
-        img.save(buf, format=mime_subtype.upper().replace("JPEG", "JPEG"))
-        encoded = base64.b64encode(buf.getvalue()).decode()
-    data_url = f"data:image/{mime_subtype};base64,{encoded}"
+    segments = _build_vlm_segments(resolved, detections, VLM_SEGMENT_RADIUS)
+    if not segments:
+        raise ValueError("Local VLM inspection requires detector centroids")
 
     guided_json = {
         "type": "object",
@@ -569,32 +522,59 @@ def _inspect_local(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, 
         "required": ["answer"],
         "additionalProperties": False,
     }
+    segment_results = []
+    total_segments = len(segments)
 
-    payload = {
-        "model": VLM_MODEL,
-        "messages": [
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": question},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            }
-        ],
-        "max_tokens": 16,
-        "temperature": 0,
-        "response_format": {
-            "type": "json_schema",
-            "json_schema": {
-                "name": "vlm_response",
-                "schema": guided_json,
-                "strict": True,
+    for index, segment in enumerate(segments, start=1):
+        segment_started = time.perf_counter()
+        segment_question = (
+            f"Focus on the detected {segment['label']} centered in this image. Is "
+            "the surface directly underneath it bare gray or silver metal rather "
+            "than green or turquoise cloth? The gray instrument itself does not "
+            "count. Return true for bare metal and false for green cloth."
+        )
+        progress = {
+            "question": segment_question,
+            "segments_total": total_segments,
+            "segment_index": index,
+            "segment_label": segment["label"],
+            "segment_image_url": segment["image_url"],
+        }
+        if ctx.deps.emit:
+            ctx.deps.emit(
+                "vlm_local",
+                **progress,
+                segments_processed=index - 1,
+                segment_status="running",
+                segments=segment_results,
+                detail=f"Segment {index}/{total_segments}: {segment['label']} working…",
+            )
+
+        payload = {
+            "model": VLM_MODEL,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": segment["data_url"]},
+                        },
+                        {"type": "text", "text": segment_question},
+                    ],
+                }
+            ],
+            "max_tokens": 16,
+            "temperature": 0,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "vlm_response",
+                    "schema": guided_json,
+                    "strict": True,
+                },
             },
-        },
-    }
-
-    vlm_error = None
-    try:
+        }
         response = httpx.post(
             f"{VLM_BASE_URL}/chat/completions",
             json=payload,
@@ -606,54 +586,137 @@ def _inspect_local(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, 
         )
         response.raise_for_status()
         raw = response.json()["choices"][0]["message"]["content"]
-        parsed = json.loads(raw)
-        vlm_verdict = parsed.get("answer")
-    except (httpx.HTTPError, json.JSONDecodeError, AttributeError, KeyError) as exc:
-        if not candidates:
-            raise
-        vlm_verdict = None
-        vlm_error = f"{type(exc).__name__}: {exc}"
+        segment_verdict = json.loads(raw).get("answer")
+        if not isinstance(segment_verdict, bool):
+            raise ValueError("Local VLM response did not contain a boolean answer")
 
-    verdict = bool(candidates) or vlm_verdict
-    if candidates:
-        labels = ", ".join(sorted({candidate["label"] for candidate in candidate_details}))
-        confirmation = (
-            f"local VLM answered {str(vlm_verdict).lower()}"
-            if vlm_verdict is not None
-            else "local VLM confirmation was unavailable"
-        )
-        answer = f"Detector found off-drape context around {labels}; {confirmation}."
-    else:
-        answer = f"Local VLM answered {str(vlm_verdict).lower()}."
+        segment_result = {
+            "index": index,
+            "label": segment["label"],
+            "verdict": segment_verdict,
+            "crop_box": segment["crop_box"],
+            "image_url": segment["image_url"],
+            "duration_ms": (time.perf_counter() - segment_started) * 1000,
+        }
+        segment_results.append(segment_result)
+        if ctx.deps.emit:
+            ctx.deps.emit(
+                "vlm_local",
+                **progress,
+                segments_processed=index,
+                segment_status="complete",
+                segment_verdict=segment_verdict,
+                segment_duration_ms=segment_result["duration_ms"],
+                segments=segment_results,
+                detail=(
+                    f"Segment {index}/{total_segments}: {segment['label']} "
+                    f"answered {str(segment_verdict).lower()}"
+                ),
+            )
 
+    verdict = any(segment["verdict"] for segment in segment_results)
+    positives = [
+        f"{segment['label']} #{segment['index']}"
+        for segment in segment_results
+        if segment["verdict"]
+    ]
+    answer = (
+        f"Local VLM flagged {', '.join(positives)}."
+        if positives
+        else f"Local VLM cleared all {total_segments} detector segments."
+    )
     result = {
         "image": str(resolved),
         "question": question,
         "answer": answer,
         "verdict": verdict,
-        "vlm_verdict": vlm_verdict,
-        "candidates": candidate_details,
+        "segments": segment_results,
+        "segments_processed": total_segments,
+        "segments_total": total_segments,
     }
-    if vlm_error:
-        result["vlm_error"] = vlm_error
     if ctx.deps.emit:
-        ctx.deps.emit("tool_call",
-                      tool_name="inspect_scene",
-                      tool_args={"image_path": image_path, "question": question},
-                      tool_result=result,
-                      detail=f"inspect_scene (local): {question[:80]}")
-        ctx.deps.emit("vlm_local",
-                      question=question,
-                      answer=answer,
-                      verdict=verdict,
-                      detail=f"Local VLM: {question[:80]}")
+        ctx.deps.emit(
+            "tool_call",
+            tool_name="inspect_scene",
+            tool_args={"image_path": image_path, "question": question},
+            tool_result=result,
+            detail=f"inspect_scene (local): {question[:80]}",
+        )
+        ctx.deps.emit(
+            "vlm_local",
+            question=question,
+            answer=answer,
+            verdict=verdict,
+            segments=segment_results,
+            segments_processed=total_segments,
+            segments_total=total_segments,
+            duration_ms=(time.perf_counter() - started) * 1000,
+            detail=f"Local VLM: {question[:80]}",
+        )
     return result
+
+
+def _build_vlm_segments(resolved: Path, detections: dict, radius: int) -> list[dict]:
+    """Create and persist fixed-size image contexts around detector centroids."""
+    from io import BytesIO
+
+    from PIL import Image
+
+    frame_width = detections.get("frame_width") or 0
+    frame_height = detections.get("frame_height") or 0
+    items = detections.get("items") or []
+    if not frame_width or not frame_height or not items:
+        return []
+
+    source = Image.open(resolved).convert("RGB")
+    scale_x = source.width / frame_width
+    scale_y = source.height / frame_height
+    crop_width = min(source.width, round(radius * 2 * scale_x))
+    crop_height = min(source.height, round(radius * 2 * scale_y))
+    output_dir = DATA_DIR / "segments"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    run_id = time.time_ns()
+    segments = []
+
+    for index, detection in enumerate(items, start=1):
+        center_x = (detection["x"] + detection["width"] / 2) * scale_x
+        center_y = (detection["y"] + detection["height"] / 2) * scale_y
+        left = round(min(max(center_x - crop_width / 2, 0), source.width - crop_width))
+        top = round(min(max(center_y - crop_height / 2, 0), source.height - crop_height))
+        right = left + crop_width
+        bottom = top + crop_height
+        crop = source.crop((left, top, right, bottom))
+        display_buffer = BytesIO()
+        crop.save(display_buffer, format="JPEG", quality=90)
+        display_bytes = display_buffer.getvalue()
+        filename = f"{resolved.stem}_{run_id}_{index}_{detection['label']}.jpg"
+        (output_dir / filename).write_bytes(display_bytes)
+
+        inference_crop = crop.copy()
+        inference_crop.thumbnail(
+            (VLM_SEGMENT_IMAGE_SIZE, VLM_SEGMENT_IMAGE_SIZE),
+            Image.Resampling.LANCZOS,
+        )
+        inference_buffer = BytesIO()
+        inference_crop.save(inference_buffer, format="JPEG", quality=90)
+        encoded = base64.b64encode(inference_buffer.getvalue()).decode()
+        segments.append(
+            {
+                "label": detection["label"],
+                "crop_box": [left, top, right, bottom],
+                "image_url": f"/data/segments/{filename}?t={run_id}",
+                "data_url": f"data:image/jpeg;base64,{encoded}",
+            }
+        )
+
+    return segments
 
 
 def _inspect_remote(ctx: RunContext[AgentDeps], resolved: Path, image_path: str, question: str) -> dict:
     """Run VLM inspection via the remote cloud VLM."""
     from apps.vlm.ask_vlm import ask_vlm
 
+    started = time.perf_counter()
     ctx.deps.emit_tool_progress("inspect_scene_remote", ctx)
     if ctx.deps.emit:
         ctx.deps.emit("vlm_remote", question=question, detail="Remote VLM: working\u2026")
@@ -678,6 +741,7 @@ def _inspect_remote(ctx: RunContext[AgentDeps], resolved: Path, image_path: str,
                       question=question,
                       answer=description,
                       verdict=verdict,
+                      duration_ms=(time.perf_counter() - started) * 1000,
                       detail=f"Remote VLM ({AZURE_VLM_DEPLOYMENT}): {question[:80]}")
     return result
 
@@ -737,7 +801,11 @@ def ask_agent(event: dict, resources: dict, emit=None) -> dict:
     prompt = json.dumps(
         {
             "event": event,
-            "resources": {k: v for k, v in resources.items() if k != "cloud_connected"},
+            "resources": {
+                key: value
+                for key, value in resources.items()
+                if key not in {"cloud_connected", "_scene_detections"}
+            },
         },
         indent=2,
     )

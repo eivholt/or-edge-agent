@@ -68,7 +68,6 @@ class Detection:
     y: int
     width: int
     height: int
-    green_context_fraction: float = 0.0
 
 
 @dataclass
@@ -159,27 +158,6 @@ def _draw_overlay(img_rgb: np.ndarray, detections: list[Detection]) -> np.ndarra
     return out
 
 
-def _green_context_fraction(
-    img_rgb: np.ndarray,
-    detection: Detection,
-    radius: int = 24,
-) -> float:
-    """Measure green-drape coverage around a detected object centroid."""
-    height, width = img_rgb.shape[:2]
-    center_x = detection.x + detection.width // 2
-    center_y = detection.y + detection.height // 2
-    x0 = max(0, center_x - radius)
-    x1 = min(width, center_x + radius + 1)
-    y0 = max(0, center_y - radius)
-    y1 = min(height, center_y + radius + 1)
-    pixels = img_rgb[y0:y1, x0:x1].astype(np.int16)
-    green_pixels = (
-        (pixels[..., 1] - pixels[..., 0] > 25)
-        & (pixels[..., 1] - pixels[..., 2] > 15)
-    )
-    return float(green_pixels.mean())
-
-
 @logfire.instrument("detect image={image_path}")
 def detect(image_path: str | Path) -> DetectionResult:
     """Run object detection on an image file.
@@ -230,9 +208,6 @@ def detect(image_path: str | Path) -> DetectionResult:
                 )
             )
 
-    for detection in result.detections:
-        detection.green_context_fraction = _green_context_fraction(cropped, detection)
-
     # Draw overlay on the cropped/resized image the model actually saw
     annotated = _draw_overlay(cropped, result.detections)
 
@@ -252,8 +227,7 @@ def detect(image_path: str | Path) -> DetectionResult:
         image=str(image_path.name),
         detections=[
             {"label": d.label, "confidence": round(d.confidence, 3),
-             "x": d.x, "y": d.y, "w": d.width, "h": d.height,
-             "green_context_fraction": round(d.green_context_fraction, 3)}
+             "x": d.x, "y": d.y, "w": d.width, "h": d.height}
             for d in result.detections
         ],
     )

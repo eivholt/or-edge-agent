@@ -209,6 +209,8 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
 
     from apps.agent.validation import validate_decision
 
+    pipeline_started = time.perf_counter()
+
     # 1. Load event
     event = json.loads(Path(scenario_path).read_text())
     scenario_name = Path(scenario_path).stem
@@ -239,6 +241,7 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     detection_image_url = None
     inference_ms = None
     detected_labels = []
+    scene_detections = None
     if frame is not None and frame.exists():
         from apps.detector.inference import detect
         det_result = detect(frame)
@@ -247,6 +250,20 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
             detection_image_url = f"/data/{det_result.annotated_path}?t={cache_bust}"
             inference_ms = det_result.inference_ms
             detected_labels = [d.label for d in det_result.detections]
+            scene_detections = {
+                "frame_width": det_result.frame_width,
+                "frame_height": det_result.frame_height,
+                "items": [
+                    {
+                        "label": detection.label,
+                        "x": detection.x,
+                        "y": detection.y,
+                        "width": detection.width,
+                        "height": detection.height,
+                    }
+                    for detection in det_result.detections
+                ],
+            }
 
     # Cache-bust the frame image URL too
     if image_url:
@@ -269,6 +286,7 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
           image_url=image_url,
           detection_image_url=detection_image_url,
           inference_ms=inference_ms,
+            duration_ms=inference_ms,
           detected_labels=detected_labels,
           detail=f"Detected {len(detected_labels) if detected_labels else total_visible} items")
 
@@ -276,6 +294,7 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     resources = {
         "room_id": event.get("room_id", "OR-?"),
         "cloud_connected": cloud_connected,
+        "_scene_detections": scene_detections,
         "sterile_processing_robot": {"available": True, "eta_seconds": 180},
         "human_runner": {"available": True, "eta_seconds": 420},
         "porter": {"available": True, "eta_seconds": 300},
@@ -285,12 +304,15 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
     _emit("agent", status="thinking", detail="Reasoning…")
 
     from apps.agent.run_fixture import ask_agent
+    agent_started = time.perf_counter()
     try:
         decision = ask_agent(event, resources, emit=_emit)
     except Exception as exc:
         error = f"Agent error: {exc}"
-        _emit("agent", status="error", summary=error, detail=error)
-        _emit("validation", errors=[error], detail=error)
+        _emit("agent", status="error", summary=error, detail=error,
+              duration_ms=(time.perf_counter() - agent_started) * 1000)
+        _emit("validation", errors=[error], detail=error,
+              total_duration_ms=(time.perf_counter() - pipeline_started) * 1000)
         return {"ok": False, "error": error}
 
     tool_calls = decision.get("tool_calls", [])
@@ -302,12 +324,14 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
           llm_iterations=llm_iters,
           context_usage=ctx_usage,
           summary=decision.get("decision_summary", ""),
+          duration_ms=(time.perf_counter() - agent_started) * 1000,
           detail=f"{len(tool_calls)} tool call(s)")
 
     # 4. Validation
     errors = validate_decision(decision, event)
     _emit("validation",
           errors=errors,
+            total_duration_ms=(time.perf_counter() - pipeline_started) * 1000,
           detail=f"{'Passed' if not errors else f'{len(errors)} error(s): ' + '; '.join(errors)}")
     if errors:
         return {"ok": False, "error": "; ".join(errors), "errors": errors}

@@ -3,20 +3,20 @@ import mimetypes
 import os
 from pathlib import Path
 
-import anthropic
 import logfire
 from dotenv import load_dotenv
+from openai import OpenAI
 
 load_dotenv(override=True)
 
 logfire.configure(service_name="or-edge-agent")
-logfire.instrument_anthropic()
+logfire.instrument_openai()
 
-AZURE_ANTHROPIC_ENDPOINT = os.getenv(
-    "AZURE_ANTHROPIC_ENDPOINT",
-    "https://synthetic-patient-resource.services.ai.azure.com/anthropic/",
+AZURE_VLM_ENDPOINT = os.getenv(
+    "AZURE_VLM_ENDPOINT",
+    "https://synthetic-patient-resource.services.ai.azure.com/openai/v1/responses",
 )
-AZURE_VLM_DEPLOYMENT = os.getenv("AZURE_VLM_DEPLOYMENT", "claude-opus-4-7")
+AZURE_VLM_DEPLOYMENT = os.getenv("AZURE_VLM_DEPLOYMENT", "gpt-5.6-sol")
 AZURE_VLM_API_KEY = os.getenv("AZURE_VLM_API_KEY")
 
 VLM_SYSTEM_PROMPT = (
@@ -29,8 +29,9 @@ VLM_SYSTEM_PROMPT = (
 
 @logfire.instrument("ask_vlm question={question}")
 def ask_vlm(image_path: str, question: str) -> str:
-    client = anthropic.Anthropic(
-        base_url=AZURE_ANTHROPIC_ENDPOINT,
+    base_url = AZURE_VLM_ENDPOINT.removesuffix("/responses").rstrip("/") + "/"
+    client = OpenAI(
+        base_url=base_url,
         api_key=AZURE_VLM_API_KEY,
     )
 
@@ -38,20 +39,20 @@ def ask_vlm(image_path: str, question: str) -> str:
     mime = mimetypes.guess_type(p.name)[0] or "image/jpeg"
     b64 = base64.b64encode(p.read_bytes()).decode("utf-8")
 
-    r = client.messages.create(
+    r = client.responses.create(
         model=AZURE_VLM_DEPLOYMENT,
-        max_tokens=300,
-        system=VLM_SYSTEM_PROMPT,
-        messages=[{
+        max_output_tokens=300,
+        instructions=VLM_SYSTEM_PROMPT,
+        input=[{
             "role": "user",
             "content": [
-                {"type": "image", "source": {"type": "base64", "media_type": mime, "data": b64}},
-                {"type": "text", "text": question},
+                {"type": "input_image", "image_url": f"data:{mime};base64,{b64}"},
+                {"type": "input_text", "text": question},
             ],
         }],
     )
 
-    return r.content[0].text.strip()
+    return r.output_text.strip()
 
 
 if __name__ == "__main__":

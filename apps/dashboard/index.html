@@ -445,6 +445,35 @@
   .vlm-verdict.pass { background: #22c55e22; color: #22c55e; }
   .vlm-verdict.fail { background: #ef444422; color: #ef4444; }
   .vlm-verdict.inconclusive { background: #f59e0b22; color: #f59e0b; }
+  .vlm-segment-progress { margin: 0 0 .45rem; }
+  .vlm-segment-progress-head {
+    display: flex; justify-content: space-between; gap: .5rem; margin-bottom: .25rem;
+    color: var(--muted); font-size: .58rem; font-variant-numeric: tabular-nums;
+  }
+  .vlm-segment-progress-track {
+    height: 5px; overflow: hidden; border-radius: 3px; background: rgba(255,255,255,.1);
+  }
+  .vlm-segment-progress-fill {
+    height: 100%; border-radius: 3px; background: var(--yellow); transition: width .25s ease;
+  }
+  .vlm-segment-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: .4rem;
+  }
+  .vlm-segment {
+    min-width: 0; overflow: hidden; border: 3px solid var(--yellow); border-radius: 6px;
+    background: rgba(234,179,8,.06);
+  }
+  .vlm-segment.inside { border-color: var(--green); background: rgba(34,197,94,.06); }
+  .vlm-segment.outside { border-color: var(--red); background: rgba(239,68,68,.06); }
+  .vlm-segment img { display: block; width: 100%; aspect-ratio: 1; object-fit: cover; }
+  .vlm-segment-meta {
+    display: flex; justify-content: space-between; gap: .3rem; padding: .25rem .3rem;
+    font-size: .52rem; line-height: 1.2; text-transform: capitalize;
+  }
+  .vlm-segment-state { font-weight: 700; }
+  .vlm-segment.inside .vlm-segment-state { color: var(--green); }
+  .vlm-segment.outside .vlm-segment-state { color: var(--red); }
+  .vlm-segment.running .vlm-segment-state { color: var(--yellow); }
 
   /* Task / SPD compact list entries */
   .task-entry { display:flex; align-items:center; gap:.4rem; padding:.45rem .55rem; font-size:.72rem; line-height:1.35; margin-bottom:.35rem; border-radius:6px; flex-wrap:wrap; background:rgba(255,255,255,.03); border-left:3px solid var(--muted); }
@@ -470,7 +499,9 @@
     padding: .55rem .7rem; font-size: .7rem; animation: slide-in .3s ease-out;
     border-left: 3px solid var(--accent);
   }
-  .log-entry .log-time { color: var(--muted); font-size: .62rem; font-family: monospace; }
+  .log-entry .log-time { display:flex; align-items:center; justify-content:space-between; gap:.5rem; color:var(--muted); font-size:.62rem; font-family:monospace; }
+  .log-entry .log-duration { color:var(--text); font-variant-numeric:tabular-nums; }
+  .log-entry .log-duration.running { color:var(--yellow); }
   .log-entry .log-comp { font-weight: 600; margin: .1rem 0; }
   .log-entry .log-detail { color: var(--muted); word-break: break-word; }
   .log-entry .log-detail code { background: rgba(255,255,255,.06); padding: .1em .3em; border-radius: 3px; font-family: 'JetBrains Mono',monospace; font-size: .62rem; }
@@ -687,7 +718,7 @@
                 <div class="node-icon"></div>
                 <div>
                   <div class="node-title">Local VLM <span class="badge-external badge-edge">Edge</span></div>
-                  <div class="node-subtitle">Ministral 3B · vLLM · Visual reasoning</div>
+                  <div class="node-subtitle">Ministral 3B · llama.cpp · Visual reasoning</div>
                 </div>
               </div>
               <div class="node-body" id="body-vlm_local">Idle</div>
@@ -784,7 +815,7 @@
         <input type="checkbox" id="offlineToggle" checked>
         <span class="toggle-slider"></span>
       </div>
-      <label for="offlineToggle">Simulate offline (no cloud)</label>
+      <label for="offlineToggle" id="offlineToggleLabel">Go online</label>
       <span class="offline-badge offline" id="offlineBadge">offline</span>
     </div>
     <h2>Quick Scenarios <button class="reset-btn" onclick="resetPipeline()" title="Reset dashboard">⟳</button></h2>
@@ -827,6 +858,48 @@ connect();
 // ── Event Handler ───────────────────────────────────
 // ── Pipeline activation state ────────────────────────
 let _pipelineTimer = null;
+const _taskStarts = new Map();
+
+function formatDuration(durationMs) {
+  if (!Number.isFinite(durationMs) || durationMs < 0) return '';
+  if (durationMs < 1000) return Math.max(1, Math.round(durationMs)) + ' ms';
+  if (durationMs < 10000) return (durationMs / 1000).toFixed(1) + ' s';
+  if (durationMs < 60000) return Math.round(durationMs / 1000) + ' s';
+  const totalSeconds = Math.round(durationMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes + 'm ' + String(seconds).padStart(2, '0') + 's';
+}
+
+function lifecyclePhase(ev) {
+  if (ev.component === 'agent') {
+    if (ev.status === 'thinking') return 'running';
+    if (ev.status === 'done' || ev.status === 'error') return 'finished';
+  }
+  if (ev.component === 'vlm_local' || ev.component === 'vlm_remote') {
+    if (ev.segment_status === 'complete') return 'finished';
+    if (ev.segment_status === 'running') return 'running';
+    if (ev.duration_ms != null || ev.answer !== undefined || ev.verdict !== undefined) return 'finished';
+    if ((ev.detail || '').toLowerCase().includes('working')) return 'running';
+  }
+  return null;
+}
+
+function durationHtml(durationMs, running, total) {
+  const label = formatDuration(durationMs);
+  if (!label) return '';
+  const prefix = total ? 'total ' : running ? 'elapsed ' : '';
+  return '<span class="log-duration' + (running ? ' running' : '') + '">' + prefix + label + '</span>';
+}
+
+setInterval(function() {
+  document.querySelectorAll('.log-entry[data-running-since]').forEach(function(entry) {
+    const duration = entry.querySelector('.log-duration');
+    if (!duration) return;
+    const started = Number(entry.dataset.runningSince);
+    duration.textContent = 'elapsed ' + formatDuration(Date.now() - started);
+  });
+}, 1000);
 
 function deactivateAll() {
   document.querySelectorAll('.node.active, .node.thinking').forEach(n => {
@@ -841,6 +914,7 @@ function deactivateAll() {
 
 function resetPipeline() {
   clearTimeout(_pipelineTimer);
+  _taskStarts.clear();
   deactivateAll();
 
   // Reset node bodies to initial text
@@ -1306,13 +1380,46 @@ function updateBody(comp, ev) {
   } else if (comp === 'vlm_local') {
     let html = '';
     if (ev.verdict === true) {
-      html += '<div class="vlm-verdict pass">Yes</div>';
+      html += '<div class="vlm-verdict fail">Outside sterile zone</div>';
     } else if (ev.verdict === false) {
-      html += '<div class="vlm-verdict fail">No</div>';
+      html += '<div class="vlm-verdict pass">Inside sterile zone</div>';
     } else if (ev.answer) {
       html += '<div class="vlm-verdict inconclusive">Inconclusive</div>';
     }
-    if (ev.question) html += '<span style="color:var(--muted)">Q:</span> ' + esc(ev.question) + '<br>';
+    const total = Number(ev.segments_total || 0);
+    const processed = Number(ev.segments_processed || 0);
+    if (total) {
+      const percent = Math.min(100, Math.round(processed / total * 100));
+      html += '<div class="vlm-segment-progress">';
+      html += '<div class="vlm-segment-progress-head"><span>Visual segments</span><span>' + processed + ' / ' + total + '</span></div>';
+      html += '<div class="vlm-segment-progress-track"><div class="vlm-segment-progress-fill" style="width:' + percent + '%"></div></div>';
+      html += '</div>';
+
+      const segments = Array.isArray(ev.segments) ? ev.segments.slice() : [];
+      if (ev.segment_status === 'running' && ev.segment_image_url && !segments.some(s => s.index === ev.segment_index)) {
+        segments.push({
+          index: ev.segment_index,
+          label: ev.segment_label,
+          image_url: ev.segment_image_url,
+          verdict: null,
+        });
+      }
+      if (segments.length) {
+        html += '<div class="vlm-segment-grid">';
+        segments.forEach(function(segment) {
+          const stateClass = segment.verdict === true ? 'outside' : segment.verdict === false ? 'inside' : 'running';
+          const stateLabel = segment.verdict === true ? 'outside' : segment.verdict === false ? 'inside' : 'running';
+          const segmentDuration = formatDuration(Number(segment.duration_ms));
+          html += '<div class="vlm-segment ' + stateClass + '">';
+          html += '<img src="' + esc(segment.image_url || '') + '" alt="' + esc(segment.label || 'instrument') + ' segment">';
+          html += '<div class="vlm-segment-meta"><span>#' + esc(segment.index) + ' ' + esc(segment.label || '') + '</span><span class="vlm-segment-state">' + stateLabel + (segmentDuration ? ' · ' + esc(segmentDuration) : '') + '</span></div>';
+          html += '</div>';
+        });
+        html += '</div>';
+      }
+    } else if (ev.question) {
+      html += '<span style="color:var(--muted)">Q:</span> ' + esc(ev.question) + '<br>';
+    }
     if (ev.answer) html += '<span style="color:var(--yellow)">A:</span> ' + renderMd(ev.answer);
     body.innerHTML = html || renderMd(detail) || 'Active';
   } else if (comp === 'vlm_remote') {
@@ -1388,32 +1495,61 @@ function setLight(color, reason) {
 
 function addLog(ev) {
   const _d = ev.timestamp ? new Date(ev.timestamp) : new Date();
-  const time = String(_d.getHours()).padStart(2,'0') + ':' + String(_d.getMinutes()).padStart(2,'0') + ':' + String(_d.getSeconds()).padStart(2,'0') + '.' + String(_d.getMilliseconds()).padStart(3,'0');
+  const time = String(_d.getHours()).padStart(2,'0') + ':' + String(_d.getMinutes()).padStart(2,'0') + ':' + String(_d.getSeconds()).padStart(2,'0');
   const detail = ev.detail || ev.summary || JSON.stringify(ev).slice(0, 200);
   const color = componentColors[ev.component] || '#71717a';
   const compName = formatComponent(ev.component);
+  const phase = lifecyclePhase(ev);
+  const eventTime = _d.getTime();
 
-  // Consolidate agent thinking events into one updatable log entry
-  if (ev.component === 'agent' && ev.status === 'thinking') {
-    let existing = log.querySelector('.log-entry[data-component="agent"][data-thinking]');
+  if (phase === 'running' && !_taskStarts.has(ev.component)) {
+    _taskStarts.set(ev.component, {eventTime: eventTime, receivedAt: Date.now()});
+  }
+  const taskStart = _taskStarts.get(ev.component);
+  let durationMs = Number(ev.duration_ms);
+  if (!Number.isFinite(durationMs) && ev.segment_duration_ms != null) {
+    durationMs = Number(ev.segment_duration_ms);
+  }
+  const totalDuration = ev.total_duration_ms != null;
+  if (totalDuration) durationMs = Number(ev.total_duration_ms);
+  if (!Number.isFinite(durationMs) && phase === 'finished' && taskStart) {
+    durationMs = eventTime - taskStart.eventTime;
+  }
+  if (!Number.isFinite(durationMs) && phase === 'running' && taskStart) {
+    durationMs = Date.now() - taskStart.receivedAt;
+  }
+  const timing = durationHtml(durationMs, phase === 'running', totalDuration);
+  const timeRow = '<div class="log-time"><span>' + time + '</span>' + timing + '</div>';
+
+  // Consolidate lifecycle updates into one task entry with a live timer.
+  if (phase === 'running') {
+    let existing = log.querySelector('.log-entry[data-component="' + ev.component + '"][data-running-since]');
     if (!existing) {
       existing = document.createElement('div');
       existing.className = 'log-entry';
-      existing.dataset.component = 'agent';
-      existing.dataset.thinking = '1';
-      log.prepend(existing);
+      existing.dataset.component = ev.component;
     }
+    existing.dataset.runningSince = taskStart.receivedAt;
     existing.innerHTML =
-      '<div class="log-time">' + time + '</div>' +
+      timeRow +
       '<div class="log-comp"><span class="log-icon" style="background:' + color + '"></span><span style="color:' + color + '">' + compName + '</span></div>' +
       '<div class="log-detail">' + renderMd(truncate(detail, 180)) + '</div>';
+    log.prepend(existing);
     return;
   }
 
-  // When agent is done, remove the thinking entry marker so next run gets a fresh one
-  if (ev.component === 'agent' && ev.status === 'done') {
-    const thinking = log.querySelector('.log-entry[data-component="agent"][data-thinking]');
-    if (thinking) delete thinking.dataset.thinking;
+  if (phase === 'finished') {
+    const running = log.querySelector('.log-entry[data-component="' + ev.component + '"][data-running-since]');
+    _taskStarts.delete(ev.component);
+    if (running) {
+      delete running.dataset.runningSince;
+      running.innerHTML =
+        timeRow +
+        '<div class="log-comp"><span class="log-icon" style="background:' + color + '"></span><span style="color:' + color + '">' + compName + '</span></div>' +
+        '<div class="log-detail">' + renderMd(truncate(detail, 180)) + '</div>';
+      log.prepend(running);
+      return;
+    }
   }
 
   const entry = document.createElement('div');
@@ -1427,7 +1563,7 @@ function addLog(ev) {
   }
 
   entry.innerHTML =
-    '<div class="log-time">' + time + '</div>' +
+    timeRow +
     '<div class="log-comp"><span class="log-icon" style="background:' + color + '"></span><span style="color:' + color + '">' + compName + '</span></div>' +
     '<div class="log-detail">' + detailHtml + '</div>';
   log.prepend(entry);
@@ -1464,9 +1600,11 @@ function renderMd(s) {
 
 // ── Offline toggle ───────────────────────────────────
 const offlineToggle = document.getElementById('offlineToggle');
+const offlineToggleLabel = document.getElementById('offlineToggleLabel');
 const offlineBadge = document.getElementById('offlineBadge');
 function applyOfflineState() {
   const off = offlineToggle.checked;
+  offlineToggleLabel.textContent = off ? 'Go online' : 'Go offline';
   offlineBadge.textContent = off ? 'offline' : 'online';
   offlineBadge.className = 'offline-badge ' + (off ? 'offline' : 'online');
   const remoteNode = document.getElementById('node-vlm_remote');

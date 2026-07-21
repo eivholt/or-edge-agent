@@ -16,8 +16,7 @@ when architecture, behavioral contracts, or verified test status changes.
 1. A scenario supplies exactly `case_id`, `room_id`, and `image_path`.
 2. Edge Impulse detects instruments and populates `visible_items` at runtime.
 3. The agent fetches EMR `required_items` and compares quantity counts.
-4. Detector context filters clean sterile scenes and targets a VLM boundary crop
-  for plausible off-drape instruments.
+4. The local or cloud VLM inspects the scene and returns a sterile-zone verdict.
 5. The agent performs every applicable action and sets one stacklight state.
 
 Owning files:
@@ -58,10 +57,12 @@ Procedure text alone must not trigger review or alter the stacklight.
 
 - `inspect_scene` is a native tool in `apps/agent/run_fixture.py`.
 - It uses local Ministral when `cloud_connected` is false and Azure when true.
-- Local inference uses detector green-context coverage to skip clean scenes.
-- Candidate scenes send a boundary crop with guided JSON: `{answer: boolean}`.
-- A detector-confirmed off-drape candidate remains actionable if local VLM
-  confirmation times out or disagrees.
+- Every local inspection crops context around each detector centroid and sends
+  each segment to Ministral with guided JSON: `{answer: boolean}`.
+- Detector geometry may locate and order context, but it must never produce,
+  bypass, or override the sterile-zone verdict. Do not add color heuristics.
+- A scene is positive when any segment VLM returns `true`. Segment thumbnails,
+  progress, verdicts, and durations are emitted to the dashboard.
 - Keep sterile workflow policy deterministic and outside the small model.
 - Ministral 3B is sensitive to tool names, docstrings, and result wording. Keep
   contracts short and explicit.
@@ -101,9 +102,10 @@ python -m pytest tests/ -m 'not llm' -q --tb=short
 python -m pytest tests/ -v --tb=short
 ```
 
-Verified 2026-07-20: 24 service-independent tests and 15 detector/reconciliation
-integration tests pass on AArch64. On-device LLM/VLM validation is documented in
-`IQ9_EVK.md`.
+Verified 2026-07-21: 29 service-independent tests pass on AArch64. The 64-token
+centroid benchmark processed all 42 detections across five cases but scored 2/5;
+256-token probes repaired the three decisive crop errors at approximately 116
+seconds per segment. On-device VLM limitations are documented in `IQ9_EVK.md`.
 Do not claim the full suite passes without running it against required services.
 
 ## Repository Hygiene
