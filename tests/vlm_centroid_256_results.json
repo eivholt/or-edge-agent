@@ -1,0 +1,579 @@
+{
+  "started_at": "2026-07-21T19:53:10.343656+00:00",
+  "completed_at": "2026-07-21T21:14:48.094218+00:00",
+  "config": {
+    "base_url": "http://127.0.0.1:8082/v1",
+    "model": "ministral3-3b-vl-q4",
+    "radius": 64,
+    "image_size": 224,
+    "image_tokens": 256,
+    "max_output_tokens": 16
+  },
+  "scenarios": {
+    "all_present": {
+      "image": "data/frames/frame_all_present.png",
+      "ground_truth": false,
+      "segments_total": 11,
+      "segments": [
+        {
+          "index": 1,
+          "label": "scissors",
+          "crop_box": [
+            192,
+            0,
+            602,
+            410
+          ],
+          "verdict": true,
+          "duration_ms": 116593.34845599733
+        },
+        {
+          "index": 2,
+          "label": "sponge",
+          "crop_box": [
+            448,
+            13,
+            858,
+            423
+          ],
+          "verdict": false,
+          "duration_ms": 117065.29894400228
+        },
+        {
+          "index": 3,
+          "label": "sponge",
+          "crop_box": [
+            576,
+            51,
+            986,
+            461
+          ],
+          "verdict": false,
+          "duration_ms": 116611.0342030006
+        },
+        {
+          "index": 4,
+          "label": "tweezers",
+          "crop_box": [
+            512,
+            153,
+            922,
+            563
+          ],
+          "verdict": false,
+          "duration_ms": 116593.86713399726
+        },
+        {
+          "index": 5,
+          "label": "scissors",
+          "crop_box": [
+            269,
+            217,
+            679,
+            627
+          ],
+          "verdict": false,
+          "duration_ms": 116820.16349600235
+        },
+        {
+          "index": 6,
+          "label": "sponge",
+          "crop_box": [
+            128,
+            422,
+            538,
+            832
+          ],
+          "verdict": false,
+          "duration_ms": 117060.33863000266
+        },
+        {
+          "index": 7,
+          "label": "sponge",
+          "crop_box": [
+            205,
+            499,
+            615,
+            909
+          ],
+          "verdict": false,
+          "duration_ms": 116797.97718099871
+        },
+        {
+          "index": 8,
+          "label": "scalpel",
+          "crop_box": [
+            473,
+            525,
+            883,
+            935
+          ],
+          "verdict": false,
+          "duration_ms": 116391.56261899916
+        },
+        {
+          "index": 9,
+          "label": "sponge",
+          "crop_box": [
+            89,
+            550,
+            499,
+            960
+          ],
+          "verdict": false,
+          "duration_ms": 116481.83233700183
+        },
+        {
+          "index": 10,
+          "label": "scalpel",
+          "crop_box": [
+            217,
+            589,
+            627,
+            999
+          ],
+          "verdict": false,
+          "duration_ms": 116602.53801599902
+        },
+        {
+          "index": 11,
+          "label": "scalpel",
+          "crop_box": [
+            422,
+            601,
+            832,
+            1011
+          ],
+          "verdict": false,
+          "duration_ms": 116337.50188599879
+        }
+      ],
+      "verdict": true,
+      "correct": false,
+      "duration_ms": 1283355.462902,
+      "completed_at": "2026-07-21T20:14:35.659706+00:00"
+    },
+    "instrument_out_of_zone": {
+      "image": "data/frames/frame_instrument_out_of_zone.png",
+      "ground_truth": true,
+      "segments_total": 8,
+      "segments": [
+        {
+          "index": 1,
+          "label": "tweezers",
+          "crop_box": [
+            435,
+            0,
+            845,
+            410
+          ],
+          "verdict": false,
+          "duration_ms": 116665.5095770002
+        },
+        {
+          "index": 2,
+          "label": "tweezers",
+          "crop_box": [
+            320,
+            38,
+            730,
+            448
+          ],
+          "verdict": false,
+          "duration_ms": 116720.73858399744
+        },
+        {
+          "index": 3,
+          "label": "scalpel",
+          "crop_box": [
+            537,
+            89,
+            947,
+            499
+          ],
+          "verdict": false,
+          "duration_ms": 116554.71026799933
+        },
+        {
+          "index": 4,
+          "label": "sponge",
+          "crop_box": [
+            89,
+            217,
+            499,
+            627
+          ],
+          "verdict": false,
+          "duration_ms": 116602.48707600113
+        },
+        {
+          "index": 5,
+          "label": "sponge",
+          "crop_box": [
+            217,
+            243,
+            627,
+            653
+          ],
+          "verdict": false,
+          "duration_ms": 116657.02180399967
+        },
+        {
+          "index": 6,
+          "label": "scalpel",
+          "crop_box": [
+            320,
+            345,
+            730,
+            755
+          ],
+          "verdict": false,
+          "duration_ms": 116338.83851499922
+        },
+        {
+          "index": 7,
+          "label": "sponge",
+          "crop_box": [
+            115,
+            371,
+            525,
+            781
+          ],
+          "verdict": false,
+          "duration_ms": 116560.74284700298
+        },
+        {
+          "index": 8,
+          "label": "scissors",
+          "crop_box": [
+            486,
+            589,
+            896,
+            999
+          ],
+          "verdict": true,
+          "duration_ms": 116181.00437099929
+        }
+      ],
+      "verdict": true,
+      "correct": true,
+      "duration_ms": 932281.0530419992,
+      "completed_at": "2026-07-21T20:30:08.142491+00:00"
+    },
+    "missing_scissors": {
+      "image": "data/frames/frame_missing_scissors.png",
+      "ground_truth": false,
+      "segments_total": 9,
+      "segments": [
+        {
+          "index": 1,
+          "label": "sponge",
+          "crop_box": [
+            13,
+            38,
+            423,
+            448
+          ],
+          "verdict": false,
+          "duration_ms": 116134.00119699872
+        },
+        {
+          "index": 2,
+          "label": "scalpel",
+          "crop_box": [
+            563,
+            64,
+            973,
+            474
+          ],
+          "verdict": false,
+          "duration_ms": 116328.67970200095
+        },
+        {
+          "index": 3,
+          "label": "scalpel",
+          "crop_box": [
+            614,
+            102,
+            1024,
+            512
+          ],
+          "verdict": false,
+          "duration_ms": 116637.6588259991
+        },
+        {
+          "index": 4,
+          "label": "sponge",
+          "crop_box": [
+            0,
+            192,
+            410,
+            602
+          ],
+          "verdict": false,
+          "duration_ms": 116298.43519399947
+        },
+        {
+          "index": 5,
+          "label": "sponge",
+          "crop_box": [
+            320,
+            217,
+            730,
+            627
+          ],
+          "verdict": false,
+          "duration_ms": 116545.65073699996
+        },
+        {
+          "index": 6,
+          "label": "sponge",
+          "crop_box": [
+            243,
+            320,
+            653,
+            730
+          ],
+          "verdict": false,
+          "duration_ms": 116533.73513800034
+        },
+        {
+          "index": 7,
+          "label": "scalpel",
+          "crop_box": [
+            614,
+            333,
+            1024,
+            743
+          ],
+          "verdict": false,
+          "duration_ms": 116643.0385729982
+        },
+        {
+          "index": 8,
+          "label": "sponge",
+          "crop_box": [
+            371,
+            345,
+            781,
+            755
+          ],
+          "verdict": false,
+          "duration_ms": 116571.71715300137
+        },
+        {
+          "index": 9,
+          "label": "tweezers",
+          "crop_box": [
+            13,
+            525,
+            423,
+            935
+          ],
+          "verdict": false,
+          "duration_ms": 116278.72038100031
+        }
+      ],
+      "verdict": false,
+      "correct": true,
+      "duration_ms": 1047971.6369009984,
+      "completed_at": "2026-07-21T20:47:36.321664+00:00"
+    },
+    "missing_something": {
+      "image": "data/frames/frame_missing_something.png",
+      "ground_truth": false,
+      "segments_total": 7,
+      "segments": [
+        {
+          "index": 1,
+          "label": "scalpel",
+          "crop_box": [
+            384,
+            0,
+            794,
+            410
+          ],
+          "verdict": false,
+          "duration_ms": 116558.84230399897
+        },
+        {
+          "index": 2,
+          "label": "scalpel",
+          "crop_box": [
+            179,
+            13,
+            589,
+            423
+          ],
+          "verdict": false,
+          "duration_ms": 116396.61169800092
+        },
+        {
+          "index": 3,
+          "label": "scalpel",
+          "crop_box": [
+            128,
+            102,
+            538,
+            512
+          ],
+          "verdict": false,
+          "duration_ms": 116547.24216400064
+        },
+        {
+          "index": 4,
+          "label": "sponge",
+          "crop_box": [
+            345,
+            550,
+            755,
+            960
+          ],
+          "verdict": false,
+          "duration_ms": 116444.89709100162
+        },
+        {
+          "index": 5,
+          "label": "sponge",
+          "crop_box": [
+            102,
+            614,
+            512,
+            1024
+          ],
+          "verdict": false,
+          "duration_ms": 116594.2221760015
+        },
+        {
+          "index": 6,
+          "label": "sponge",
+          "crop_box": [
+            230,
+            614,
+            640,
+            1024
+          ],
+          "verdict": false,
+          "duration_ms": 116584.2172699995
+        },
+        {
+          "index": 7,
+          "label": "scissors",
+          "crop_box": [
+            537,
+            614,
+            947,
+            1024
+          ],
+          "verdict": false,
+          "duration_ms": 116629.86614200054
+        }
+      ],
+      "verdict": false,
+      "correct": true,
+      "duration_ms": 815755.8988450037,
+      "completed_at": "2026-07-21T21:01:12.299726+00:00"
+    },
+    "sterile_zone_ambiguity": {
+      "image": "data/frames/frame_sterile_zone_ambiguity.png",
+      "ground_truth": true,
+      "segments_total": 7,
+      "segments": [
+        {
+          "index": 1,
+          "label": "scalpel",
+          "crop_box": [
+            269,
+            89,
+            679,
+            499
+          ],
+          "verdict": false,
+          "duration_ms": 116733.41572099889
+        },
+        {
+          "index": 2,
+          "label": "scalpel",
+          "crop_box": [
+            448,
+            141,
+            858,
+            551
+          ],
+          "verdict": false,
+          "duration_ms": 116685.78436700045
+        },
+        {
+          "index": 3,
+          "label": "scalpel",
+          "crop_box": [
+            192,
+            243,
+            602,
+            653
+          ],
+          "verdict": false,
+          "duration_ms": 116634.49313299861
+        },
+        {
+          "index": 4,
+          "label": "sponge",
+          "crop_box": [
+            128,
+            371,
+            538,
+            781
+          ],
+          "verdict": false,
+          "duration_ms": 116234.43153100015
+        },
+        {
+          "index": 5,
+          "label": "sponge",
+          "crop_box": [
+            499,
+            371,
+            909,
+            781
+          ],
+          "verdict": false,
+          "duration_ms": 116575.12703700195
+        },
+        {
+          "index": 6,
+          "label": "sponge",
+          "crop_box": [
+            397,
+            422,
+            807,
+            832
+          ],
+          "verdict": false,
+          "duration_ms": 116632.37058100276
+        },
+        {
+          "index": 7,
+          "label": "scissors",
+          "crop_box": [
+            243,
+            614,
+            653,
+            1024
+          ],
+          "verdict": true,
+          "duration_ms": 116096.09622100106
+        }
+      ],
+      "verdict": true,
+      "correct": true,
+      "duration_ms": 815591.7185910039,
+      "completed_at": "2026-07-21T21:14:48.092926+00:00"
+    }
+  },
+  "summary": {
+    "correct": 4,
+    "total": 5,
+    "duration_ms": 4894955.770281006,
+    "segments": 42
+  }
+}

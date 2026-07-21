@@ -56,7 +56,7 @@ def test_inspect_scene_uses_exactly_one_backend(
     monkeypatch.setattr(run_fixture, "_inspect_remote", inspect("remote"))
     monkeypatch.setattr(run_fixture, "_inspect_local", inspect("local"))
 
-    result = run_fixture.inspect_scene.function(ctx, str(FRAME_PATH.resolve()))
+    result = run_fixture.inspect_scene(ctx, str(FRAME_PATH.resolve()))
 
     assert result == {"verdict": False}
     assert calls == [expected_backend]

@@ -1,8 +1,11 @@
 # Build An On-Device Surgical Logistics Agent On The IQ9
 
 **Author:** [Eivind Holt](https://www.linkedin.com/in/eivholt/), July 2026  
+
 **Repository:** [github.com/eivholt/or-edge-agent](https://github.com/eivholt/or-edge-agent)  
-**Target:** [Qualcomm Dragonwing IQ-9075 EVK / QCS9075 / Hexagon v73](https://www.qualcomm.com/developer/hardware/qualcomm-iq-9075-evaluation-kit-evk). Hardware generously sponsored by Qualcomm 
+
+**Target:** [Qualcomm Dragonwing IQ-9075 EVK / QCS9075 / Hexagon v73](https://www.qualcomm.com/developer/hardware/qualcomm-iq-9075-evaluation-kit-evk). Hardware generously sponsored by Qualcomm
+
 **Model:** [mistralai/Ministral-3-3B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512) Q4_K_M GGUF running on device NPU
 
 This tutorial shows how to build and run a complete agentic
@@ -25,19 +28,21 @@ The architecture highlights three reusable edge-agent patterns:
 
 1. **Object detection triggers agent.** An Edge Impulse FOMO model detects and
   counts instruments before triggering agent reasoning.
-2. **One local multimodal large language model in two roles.** Ministral powers
-   the tool-using agent through a text endpoint. The agent can also call a
-  projector-backed Ministral endpoint to inspect detector-centered image
-  segments. The detector selects context; only the VLM classifies the support
-  surface. Deterministic application code retains the final workflow policy.
+2. **Separate language reasoning from visual inspection.** Local Ministral
+  powers the tool-using agent through a text endpoint. Visual inspection can
+  use projector-backed local Ministral on detector-centered image segments or
+  a cloud VLM on the full frame. The detector selects local context; only the
+  VLM classifies the support surface. Deterministic application code retains
+  the final workflow policy.
 3. **A visual, on-device execution trace.** The dashboard shows the input image,
    detector results, case-record lookup, supply comparison, visual inspection,
    tool actions, and final status light as the workflow runs on the device.
 
-The sections below assemble those parts, run the application, and verify the
-full detector-to-agent path. They use the already-exported Ministral Qualcomm AI
-Runtime bundle. Do not rebuild or re-export the text model when these artifacts
-are present.
+The sections below start with the official GGUF on an x86-64 Ubuntu workstation,
+compile it into Qualcomm AI Runtime context binaries, copy the export and its
+matching runtime to the evaluation kit, and build the service that keeps the
+model loaded. They then assemble the application and verify the full
+detector-to-agent path. No setup from another tutorial is assumed.
 
 The configuration below was validated on:
 
@@ -48,51 +53,344 @@ The configuration below was validated on:
 - Ministral 3B Q4 decoder plus official BF16 vision projector on CPU
 - Edge Impulse float32 AArch64 runner
 
-## 1. Verify The Existing Qualcomm AI Runtime Setup
+## Glossary
 
-Complete the `qai-nemotron` evaluation-kit setup first. This application reuses
-its Qualcomm AI Runtime environment, Genie service, native tool-call adapter,
-and exported model bundle. The required paths are:
+- **BF16 (bfloat16):** A 16-bit floating-point format commonly used for neural
+  network inference. Here, the vision projector remains BF16 while the language
+  model is quantized more aggressively.
+- **Context binary:** A compiled, serialized QNN model graph that the target
+  device can load without recompiling the network. This tutorial produces two
+  context binaries because the language model is split into two partitions.
+- **EVK (evaluation kit):** A development board for evaluating a processor
+  before integrating it into a product. The target here is the Qualcomm
+  Dragonwing IQ-9075 EVK.
+- **FOMO (Faster Objects, More Objects):** Edge Impulse's lightweight object
+  detector. It predicts object classes and centroids on a grid, which is enough
+  for this application to count instruments and select image regions.
+- **Genie:** Qualcomm's generative-AI runtime and API for executing language
+  models compiled for Qualcomm hardware.
+- **GGUF:** A portable model-file format used by inference engines such as
+  `llama.cpp`. It packages model tensors and metadata; it is the source artifact
+  that QAIRT compiles for the IQ9075 in this tutorial.
+- **HTP (Hexagon Tensor Processor):** The neural-network accelerator within the
+  Qualcomm Hexagon processor. The exported text model runs on this accelerator.
+- **Multimodal projector:** A small learned component that maps features from a
+  vision encoder into embeddings the language model can consume. The projector
+  must match the language model release.
+- **NPU (neural processing unit):** A processor specialized for neural-network
+  operations. HTP is the Qualcomm accelerator used as the NPU in this setup.
+- **Q4_K_M:** A GGUF quantization scheme that stores most model weights at about
+  four bits while retaining selected tensors at higher precision. It reduces
+  memory and compute requirements at some cost to numerical fidelity.
+- **QAIRT (Qualcomm AI Runtime):** Qualcomm's toolkit and runtime for converting,
+  compiling, and executing AI models on Qualcomm processors.
+- **QNN (Qualcomm Neural Network):** The graph and backend API within QAIRT. The
+  exporter targets the `QnnHtp` backend and produces QNN context binaries.
+- **Quantization:** Representing model weights with fewer bits than conventional
+  floating point to reduce model size, memory bandwidth, and inference cost.
+- **VLM (vision-language model):** A model that accepts both images and text.
+  This application uses Ministral with its vision projector to inspect image
+  segments selected by the detector.
 
-```text
-~/qairt-env.sh
-~/qairt-2.47.0.260601/
-~/qai-nemotron/
-~/src/qai-appbuilder-full/samples/genie/c++/Service/GenieService_v2.1.5_qnnunknown/GenieAPIService
-~/ministral_q4_genie_export/genie_config.agent.json
-~/ministral_q4_genie_export/artifacts/split_model_1.bin
-~/ministral_q4_genie_export/artifacts/split_model_2.bin
-~/ministral_q4_genie_export/artifacts/tokenizer.json
-```
+## Why Visual Inspection Can Run Locally Or Remotely
 
-Check them on the evaluation kit:
+The first version used one local multimodal Ministral model for visual
+inspection. On a workstation with an RTX 5090, the BF16 model processed the
+entire image in about 0.46 seconds and correctly identified the known
+out-of-zone instrument. An earlier end-to-end application run also passed all
+five scenarios three times. This made full-frame local inference the simplest
+design: send one image to the VLM and let it inspect the complete scene.
+
+Moving that same idea to the IQ9075 evaluation kit exposed two problems. The
+Q4 decoder and BF16 projector run through `llama.cpp` on the kit's CPU rather
+than through the HTP text-model path. Full-frame requests took 446 seconds at
+1024 visual tokens and 945 seconds at 2048 visual tokens, and both still missed
+the known positive scene. The small local model was therefore both too slow and
+too unreliable for this spatial judgment on the evaluation kit.
+
+We then used the fast FOMO detector as a visual gate. Instead of asking the VLM
+to search the entire frame, the application creates a square crop around each
+detected instrument's centroid, preserving enough of the surrounding surface
+to show whether that instrument is on the green drape or exposed metal. Each
+crop receives a constrained boolean question, and the scene is positive when
+any crop is positive. This is a reusable edge pattern: use a small detector to
+find relevant regions, then spend VLM compute only on those regions. Detector
+geometry selects the evidence; it never decides the sterile-zone verdict.
+
+The crop experiment demonstrated that the extra local detail can recover the
+needed decisions, but not at a practical speed. At 64 visual tokens, all 42
+crops across five scenarios completed in 27 minutes, but only two scenarios
+were correct. The complete 256-token run corrected those three failures but
+introduced a false positive in `all_present`, finishing **4/5 cases correct**.
+Its 42 serial crops took 4,895 seconds (81 minutes 35 seconds), or about 14-21
+minutes per case. Slicing can supply more useful visual evidence, but this local
+implementation remains too slow and inconsistent for an operational workflow.
+
+For that reason, the application now supports a cloud VLM for visual inspection.
+The dashboard's cloud option sends the full image and the same fixed question to
+the configured Azure VLM, while the text/tool agent remains local on the HTP.
+With cloud mode off, the detector-centered local experiment remains available
+for reproducibility, offline evaluation, and dashboard demonstrations. Cloud
+mode is an engineering fallback, not a requirement of the architecture: it can
+be replaced by a more capable VLM on a workstation or another edge server,
+provided the visual-inspection adapter sends the image and returns the same
+boolean verdict contract. The later performance section records the complete
+measurements and their limitations.
+
+## Prepare The Export Workstation
+
+Model compilation runs on an x86-64 Ubuntu workstation, not on the evaluation
+kit. The validated host used Ubuntu 22.04 under WSL2, QAIRT DEV `0.8.1`, and
+Qualcomm AI Runtime `2.47.0.260601`. Reserve 45-50 GB of fast Linux storage:
+the 2.15 GB GGUF expands into a 30 GB build cache, a 3.3 GB saved container, and
+a 3.3 GB deployable Genie export. The validated export took about 25 minutes.
+
+Install Miniconda if `conda` is not already available, then clone this
+repository in the workstation's Linux filesystem:
 
 ```bash
-source "$HOME/qairt-env.sh"
-test "$PRODUCT_SOC" = 9075
-test "$DSP_ARCH" = 73
-test -x "$HOME/src/qai-appbuilder-full/samples/genie/c++/Service/GenieService_v2.1.5_qnnunknown/GenieAPIService"
-test -f "$HOME/ministral_q4_genie_export/genie_config.agent.json"
-test -f "$HOME/ministral_q4_genie_export/artifacts/split_model_1.bin"
-test -f "$HOME/ministral_q4_genie_export/artifacts/split_model_2.bin"
+git clone https://github.com/eivholt/or-edge-agent.git "$HOME/or-edge-agent"
+cd "$HOME/or-edge-agent"
+
+source "$HOME/miniconda3/etc/profile.d/conda.sh"
+conda create -y -n qairt-dev-gguf \
+  python=3.12 cmake make clang clangxx llvmdev \
+  libcxx libcxxabi libunwind flatbuffers
+conda activate qairt-dev-gguf
+python -m pip install "qairt-dev==0.8.1" "huggingface_hub[cli]==0.36.2"
 ```
 
-The checked-in Genie config has a 4096-token context and a `QnnHtp` backend.
-Model conversion is intentionally outside this tutorial.
+`qairt-dev` is distributed through Qualcomm's package channel and may require
+the access credentials associated with the Qualcomm developer account. Let its
+version manager install the host dependencies and fetch the exact SDK:
 
-## 2. Install The Application
+```bash
+qairt-vm -y -f
+mkdir -p "$HOME/qairt_sdks/qairt"
+qairt-vm fetch -v 2.47.0 -d "$HOME/qairt_sdks/qairt"
 
-Install Git Large File Storage before cloning because both detector runners are
-stored as large-file objects.
+export QAIRT_SDK_ROOT="$HOME/qairt_sdks/qairt/2.47.0.260601"
+export PATH="$QAIRT_SDK_ROOT/bin/x86_64-linux-clang:$PATH"
+export LD_LIBRARY_PATH="$QAIRT_SDK_ROOT/lib/x86_64-linux-clang:${LD_LIBRARY_PATH:-}"
+qairt-vm -i
+```
+
+If `qairt-vm` prints a different build suffix for 2.47, use that directory in
+every command below. Do not source the SDK's complete `envsetup.sh` in this
+Conda environment: it can put a second `qairt` Python package ahead of QAIRT
+DEV. The three explicit exports provide the required host tools and libraries.
+
+## Download And Export Ministral
+
+Download Mistral's official Q4_K_M file. QAIRT consumes the existing weight
+quantization, constructs the IQ9075 graph, splits it into two partitions, and
+compiles both partitions into HTP context binaries.
+
+```bash
+mkdir -p "$HOME/models/ministral3_3b"
+hf download \
+  mistralai/Ministral-3-3B-Instruct-2512-GGUF \
+  Ministral-3-3B-Instruct-2512-Q4_K_M.gguf \
+  --local-dir "$HOME/models/ministral3_3b"
+
+sha256sum \
+  "$HOME/models/ministral3_3b/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf"
+```
+
+The validated GGUF SHA-256 is:
+
+```text
+9ed150d4367e68df0ac8e1540f6ddc65b42d0ee26378329d1ecbca60f93fc5f8
+```
+
+Run the repository exporter from the active QAIRT environment:
+
+```bash
+cd "$HOME/or-edge-agent"
+mkdir -p logs
+
+/usr/bin/time -v \
+  python scripts/export_ministral3_3b_iq9075_gguf.py \
+    --gguf "$HOME/models/ministral3_3b/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf" \
+    --build-root "$HOME/qairt_build/ministral3_3b_q4" \
+  2>&1 | tee logs/ministral3_3b_q4_export.log
+```
+
+The helper selects `dsp_arch:v73;soc_model:77;cores:1`, the explicit QAIRT
+target for the IQ9075, and requests two QNN context binaries. It saves the
+intermediate `LLMContainer` under `container/` and calls
+`LLMContainer.export()` to write the deployable package under `genie/`.
+Successful output ends with `EXPORT_SUMMARY=`. The final directory contains:
+
+```text
+~/qairt_build/ministral3_3b_q4/genie/
+|-- genie_config.json
+`-- artifacts/
+    |-- split_model_1.bin
+    |-- split_model_2.bin
+    |-- tokenizer.json
+    `-- tmp*.json
+```
+
+Confirm that the generated config names `QnnHtp`, both context binaries are
+substantial files, and no partial output was mistaken for an export:
+
+```bash
+GENIE="$HOME/qairt_build/ministral3_3b_q4/genie"
+python -m json.tool "$GENIE/genie_config.json" >/dev/null
+grep -q QnnHtp "$GENIE/genie_config.json"
+test "$(stat -c %s "$GENIE/artifacts/split_model_1.bin")" -gt 1000000000
+test "$(stat -c %s "$GENIE/artifacts/split_model_2.bin")" -gt 1000000000
+du -sh "$GENIE"
+```
+
+The exact context hashes are useful only when checking the validated build;
+QAIRT may produce different binaries on another supported build:
+
+```bash
+sha256sum \
+  "$GENIE/artifacts/split_model_1.bin" \
+  "$GENIE/artifacts/split_model_2.bin" \
+  "$GENIE/artifacts/tokenizer.json"
+```
+
+```text
+split_model_1.bin  4f90da6bb305a3e8e52151101b99a0b45f8fff035f81dbcc2d8b3350ab2d0a09
+split_model_2.bin  67b16bb7389736c519d15859558cbb027365a12020754cb2e351cf91f23d6a23
+tokenizer.json     53136e49a780a9198214b29ec47305ba0f60031463d9fcfa275b0325d18c1a57
+```
+
+## Install The Matching Runtime On The Evaluation Kit
+
+Keep QAIRT 2.47 beside the kit's factory runtime instead of replacing
+`/opt/qairt/current`. A model compiled by 2.47 failed during context creation
+when loaded with the default 2.45 runtime.
+
+On the workstation, set the evaluation-kit address and create the destination:
+
+```bash
+EVK=ubuntu@<device-ip>
+QAIRT_DEVICE_ROOT=/home/ubuntu/qairt-2.47.0.260601
+TARGET=aarch64-oe-linux-gcc11.2
+
+ssh "$EVK" "mkdir -p \
+  $QAIRT_DEVICE_ROOT/bin/$TARGET \
+  $QAIRT_DEVICE_ROOT/lib/$TARGET \
+  $QAIRT_DEVICE_ROOT/lib/hexagon-v73/unsigned"
+```
+
+Copy the target executables, AArch64 libraries, and Hexagon v73 libraries from
+the same SDK that performed the export:
+
+```bash
+rsync -ah --info=progress2 \
+  "$QAIRT_SDK_ROOT/bin/$TARGET/" \
+  "$EVK:$QAIRT_DEVICE_ROOT/bin/$TARGET/"
+rsync -ah --info=progress2 \
+  "$QAIRT_SDK_ROOT/lib/$TARGET/" \
+  "$EVK:$QAIRT_DEVICE_ROOT/lib/$TARGET/"
+rsync -ah --info=progress2 \
+  "$QAIRT_SDK_ROOT/lib/hexagon-v73/unsigned/" \
+  "$EVK:$QAIRT_DEVICE_ROOT/lib/hexagon-v73/unsigned/"
+```
+
+Transfer the exported model:
+
+```bash
+rsync -ah --info=progress2 \
+  "$HOME/qairt_build/ministral3_3b_q4/genie/" \
+  "$EVK:~/ministral_q4_genie_export/"
+```
+
+## Prepare The Bundle On The Evaluation Kit
+
+Open an evaluation-kit shell, clone the repository without downloading its
+Git LFS detector binaries yet, and create the deterministic agent
+configuration:
+
+```bash
+ssh "$EVK"
+sudo apt-get update
+sudo apt-get install -y git
+GIT_LFS_SKIP_SMUDGE=1 git clone \
+  https://github.com/eivholt/or-edge-agent.git "$HOME/or-edge-agent"
+cd "$HOME/or-edge-agent"
+python3 scripts/prepare_genie_bundle.py "$HOME/ministral_q4_genie_export"
+```
+
+This preserves the original export and writes `genie_config.agent.json` with
+seed 42, temperature 0, top-k 1, and top-p 1. It also writes the C++ service's
+identity `prompt.json` and root-level relative links to artifacts that the
+sample service resolves by basename.
+
+Verify every runtime and model input before compiling the server:
+
+```bash
+QAIRT_ROOT="$HOME/qairt-2.47.0.260601"
+TARGET=aarch64-oe-linux-gcc11.2
+BUNDLE="$HOME/ministral_q4_genie_export"
+
+test -x "$QAIRT_ROOT/bin/$TARGET/genie-t2t-run"
+test -f "$QAIRT_ROOT/lib/$TARGET/libQnnHtp.so"
+test -f "$QAIRT_ROOT/lib/hexagon-v73/unsigned/libQnnHtpV73Skel.so"
+test -f "$BUNDLE/genie_config.agent.json"
+test -L "$BUNDLE/split_model_1.bin"
+test -L "$BUNDLE/split_model_2.bin"
+```
+
+## Build The Persistent Genie Service
+
+The application uses Qualcomm's open-source `GenieAPIService` to load the two
+contexts once and keep them resident between agent turns. Build the validated
+source revision directly on the evaluation kit:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential cmake git
+
+mkdir -p "$HOME/src"
+git clone --recurse-submodules \
+  https://github.com/qualcomm/qai-appbuilder.git \
+  "$HOME/src/qai-appbuilder-full"
+cd "$HOME/src/qai-appbuilder-full"
+git checkout 86ce07addc4404a026a5fdb17787ca804a8221d4
+git submodule update --init --recursive
+git apply "$HOME/or-edge-agent/scripts/qai_appbuilder_86ce07a_iq9.patch"
+
+export QNN_SDK_ROOT=/opt/qairt/current
+SERVICE_SRC="$HOME/src/qai-appbuilder-full/samples/genie/c++/Service"
+cmake -S "$SERVICE_SRC" -B "$SERVICE_SRC/build_linux" \
+  -DCMAKE_BUILD_TYPE=Release
+cmake --build "$SERVICE_SRC/build_linux" -j2
+```
+
+The pinned source needs its recursive submodules for headers such as
+`CLI/CLI.hpp`. The repository patch fixes one GCC 13 qualification error and
+binds the service to loopback; it does not alter inference or tool parsing.
+Keep `QNN_SDK_ROOT` set for both CMake commands. Compilation uses the kit's
+installed development headers, while the launch script selects the side-by-side
+2.47 runtime that matches the model.
+
+Locate the resulting service and verify it is executable:
+
+```bash
+SERVICE_BIN="$SERVICE_SRC/GenieService_v2.1.5_qnnunknown/GenieAPIService"
+test -x "$SERVICE_BIN"
+```
+
+## Install The Application
+
+Install Git Large File Storage because both detector runners are stored as
+large-file objects. The bundle-preparation steps deferred those downloads so
+the service patch was available before the application environment had to be
+installed; fetch the model binaries now.
 
 ```bash
 sudo apt update
 sudo apt install -y git git-lfs python3.12-venv
 git lfs install
 
-cd "$HOME"
-git clone <repository-url> or-edge-agent
-cd or-edge-agent
+cd "$HOME/or-edge-agent"
 git lfs pull
 
 python3 -m venv .venv
@@ -113,28 +411,91 @@ The validated SHA-256 is:
 90b5809422276b14db3ba0c47ecc3061bbb4b76c78b7ac0d093ca182b2ac0238
 ```
 
+### Alternative: Download The Detector With The Edge Impulse CLI
+
+Instead of taking the detector runner from this repository, build and download
+it from the public Edge Impulse project:
+
+1. Sign in to Edge Impulse and open
+  [Surgery Inventory Synthetic NVIDIA](https://studio.edgeimpulse.com/public/371734/latest).
+2. Select **Clone this project**. The Linux runner can authenticate against a
+  project in your account; cloning preserves the public project's impulse and
+  trained model while giving you permission to build a deployment.
+3. On the evaluation kit, install the Edge Impulse Linux CLI in a user-owned npm
+  prefix:
+
+```bash
+sudo apt update
+sudo apt install -y nodejs npm gcc g++ make
+node --version  # Must be v16 or newer.
+
+mkdir -p "$HOME/.npm-global"
+npm config set prefix "$HOME/.npm-global"
+export PATH="$HOME/.npm-global/bin:$PATH"
+printf '\nexport PATH="$HOME/.npm-global/bin:$PATH"\n' >> "$HOME/.profile"
+npm install -g edge-impulse-linux
+```
+
+Download the float32 AArch64 Linux runner into the path selected automatically
+by the application:
+
+```bash
+cd "$HOME/or-edge-agent"
+edge-impulse-linux-runner --clean \
+  --force-target runner-linux-aarch64 \
+  --force-engine tflite \
+  --download models/modelfile.aarch64.eim
+chmod +x models/modelfile.aarch64.eim
+```
+
+The CLI prompts for an Edge Impulse account and project. Select the cloned
+**Surgery Inventory Synthetic NVIDIA** project. Do not add `--quantized`: the
+validated detector is the float32 variant. Keep `--force-engine tflite`; the
+`tflite-eon` build produced incorrect classifications with this Linux runner.
+Then repeat the `file` and `sha256sum` checks above. The checksum can change if
+the public project publishes a newer deployment, so also confirm that the CLI
+reports the four labels `scalpel`, `scissors`, `sponge`, and `tweezers`.
+
 `apps/detector/inference.py` selects this file automatically on `aarch64` and
 `arm64`. It also avoids the unused `edge_impulse_linux.audio` import, so PyAudio
 is not required for image inference.
 
-## 3. Place The Vision Files
+## Place The Vision Files
 
 The on-device vision server needs the Q4 Ministral decoder and the matching
-official BF16 projector from the same Ministral release:
+official BF16 projector from the same Ministral release. The decoder is the
+official Hugging Face file already downloaded under **Download And Export
+Ministral**; download the projector from that same repository on the
+workstation:
+
+```bash
+hf download \
+  mistralai/Ministral-3-3B-Instruct-2512-GGUF \
+  Ministral-3-3B-Instruct-2512-BF16-mmproj.gguf \
+  --local-dir "$HOME/models/ministral3_3b"
+
+test -s \
+  "$HOME/models/ministral3_3b/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf"
+test -s \
+  "$HOME/models/ministral3_3b/Ministral-3-3B-Instruct-2512-BF16-mmproj.gguf"
+```
+
+Copy both Hugging Face files from the workstation to the evaluation kit:
+
+```bash
+EVK=ubuntu@<device-ip>
+ssh "$EVK" 'mkdir -p ~/models/ministral3_vlm'
+rsync -ah --info=progress2 \
+  "$HOME/models/ministral3_3b/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf" \
+  "$HOME/models/ministral3_3b/Ministral-3-3B-Instruct-2512-BF16-mmproj.gguf" \
+  "$EVK:~/models/ministral3_vlm/"
+```
+
+The resulting paths on the evaluation kit are:
 
 ```text
 ~/models/ministral3_vlm/Ministral-3-3B-Instruct-2512-Q4_K_M.gguf
 ~/models/ministral3_vlm/Ministral-3-3B-Instruct-2512-BF16-mmproj.gguf
-```
-
-If the files already exist on a workstation, copy them without rebuilding:
-
-```bash
-ssh ubuntu@<device-ip> 'mkdir -p ~/models/ministral3_vlm'
-rsync -ah --progress \
-  Ministral-3-3B-Instruct-2512-Q4_K_M.gguf \
-  Ministral-3-3B-Instruct-2512-BF16-mmproj.gguf \
-  ubuntu@<device-ip>:models/ministral3_vlm/
 ```
 
 Expected sizes are approximately 2.15 GB for the decoder and 842 MB for the
@@ -149,7 +510,7 @@ The tested `llama.cpp` binary is:
 
 It reports build `0dc74e3` for Linux AArch64.
 
-## 4. Configure Endpoint Splitting
+## Configure Endpoint Splitting
 
 Copy the tracked IQ9 profile:
 
@@ -181,24 +542,40 @@ The split is deliberate. Port `8001` provides native tool calls through the
 Qualcomm Hexagon Tensor Processor. Port `8082` provides actual image processing
 through the Ministral projector.
 
-## 5. Start The Agent's Text Model
+To enable the dashboard's optional cloud-vision mode, add an Azure OpenAI
+Responses API endpoint, deployment, and key to `.env`:
 
-The `qai-nemotron` launcher starts the C++ Genie service on `8911` and exposes
-it as an OpenAI-compatible endpoint on `8001`:
+```dotenv
+AZURE_VLM_ENDPOINT=https://<your-resource>.services.ai.azure.com/openai/v1/responses
+AZURE_VLM_DEPLOYMENT=<vision-capable-deployment>
+AZURE_VLM_API_KEY=<your-api-key>
+```
+
+These values are read only when a run starts with the dashboard's cloud option.
+Keep secrets in `.env`; it is excluded from Git. A different remote or
+workstation VLM can replace Azure by implementing the same image-in, JSON
+`{answer, description}` adapter used by `apps/vlm/ask_vlm.py`.
+
+## Start The Agent's Text Model
+
+The repository launcher starts the C++ Genie service on loopback port `8911`,
+waits for it to load the model, and starts the native-Mistral adapter on `8001`.
+The adapter renders the complete conversation once with Ministral's native tool
+tokens and translates returned tool calls into the OpenAI response shape used
+by Pydantic AI.
 
 ```bash
-cd "$HOME/qai-nemotron"
-mkdir -p "$HOME/or-edge-agent/logs"
+cd "$HOME/or-edge-agent"
+mkdir -p logs
 
 nohup env \
-  QAIRT_ENV="$HOME/qairt-env.sh" \
   QAIRT_ROOT="$HOME/qairt-2.47.0.260601" \
   BUNDLE="$HOME/ministral_q4_genie_export" \
   CONFIG_FILE=genie_config.agent.json \
   CPP_PORT=8911 \
   PORT=8001 \
-  bash shipping_agent/run_ministral_cpp_server.sh \
-  > "$HOME/or-edge-agent/logs/ministral-text.log" 2>&1 < /dev/null &
+  bash scripts/run_ministral_text_server.sh \
+  > logs/ministral-text.log 2>&1 < /dev/null &
 ```
 
 Wait for the adapter and confirm the model alias:
@@ -209,7 +586,11 @@ curl --fail http://127.0.0.1:8001/v1/models
 
 The response must contain `ministral3-3b-q4`.
 
-## 6. Start Multimodal Ministral
+The C++ process loads the model and QNN contexts only once. The Python adapter
+serializes model requests because one Genie dialog is active and writes each
+rendered prompt and raw response under `~/genie_adapter_logs` for inspection.
+
+## Start Multimodal Ministral
 
 CPU vision is the expensive path. The application crops a square around every
 FOMO centroid and sends each crop to the VLM independently. A radius of 64 in
@@ -285,7 +666,7 @@ The files also have different precisions. The vision projector is the official
 BF16 artifact; the autoregressive decoder is Q4. It is inaccurate to describe
 the entire IQ9 vision stack as Q4.
 
-## 7. Start The Synthetic Case Service And Dashboard
+## Start The Synthetic Case Service And Dashboard
 
 The model processes are externally managed on the evaluation kit, so use `app`
 mode:
@@ -418,7 +799,7 @@ agent finishes. It checks the tool allowlist and validates task, resupply, and
 light arguments. This run passes all checks: it contains one allowed
 human-review task, no supply action, and exactly one valid red-light action.
 
-## 8. Validate On Device
+## Validate On Device
 
 Run service-independent tests first:
 
@@ -459,7 +840,7 @@ test on the current CPU VLM path. Use the service-independent tests for routine
 checks and treat the measured VLM benchmark below as the current acceptance
 evidence.
 
-## 9. Expected Performance And Policy
+## Expected Performance And Policy
 
 The validated device behavior is:
 
@@ -519,30 +900,48 @@ support-surface prompt at 64 visual tokens. Radius 64 was selected because it
 retains more surrounding edge context than 48 while keeping the instrument
 larger than radius 80 after normalization.
 
-The complete radius-64 run processed all 42 detections without short-circuiting:
+The complete radius-64 runs processed all 42 detections without
+short-circuiting:
 
-| Scenario | Segments | Ground truth | 64-token verdict | Time | Correct |
-| --- | ---: | --- | --- | ---: | --- |
-| `all_present` | 11 | `false` | `false` | 424.0 s | yes |
-| `instrument_out_of_zone` | 8 | `true` | `true` | 309.2 s | yes |
-| `missing_scissors` | 9 | `false` | `true` | 348.9 s | no |
-| `missing_something` | 7 | `false` | `true` | 270.8 s | no |
-| `sterile_zone_ambiguity` | 7 | `true` | `false` | 270.4 s | no |
+| Scenario | Segments | Truth | 64-token verdict | 64-token time | 256-token verdict | 256-token time |
+| --- | ---: | --- | --- | ---: | --- | ---: |
+| `all_present` | 11 | `false` | `false` (correct) | 424.0 s | `true` (wrong) | 1283.4 s |
+| `instrument_out_of_zone` | 8 | `true` | `true` (correct) | 309.2 s | `true` (correct) | 932.3 s |
+| `missing_scissors` | 9 | `false` | `true` (wrong) | 348.9 s | `false` (correct) | 1048.0 s |
+| `missing_something` | 7 | `false` | `true` (wrong) | 270.8 s | `false` (correct) | 815.8 s |
+| `sterile_zone_ambiguity` | 7 | `true` | `false` (wrong) | 270.4 s | `true` (correct) | 815.6 s |
 
-The total was 1624.1 seconds (27 minutes 4 seconds), or **2/5 cases
-correct**. At 16 visual tokens, calls fell to 17.7 seconds but a controlled
-out-of-zone crop became a false negative. At 256 visual tokens, the three crop
-decisions responsible for the 64-token case failures were all corrected, but
-each took 116.2-116.5 seconds. Applying that cost to all 42 segments is roughly
-81 minutes, or 9-21 minutes per case.
+The 64-token total was 1624.1 seconds (27 minutes 4 seconds), or **2/5
+cases correct**. The 256-token total was 4895.0 seconds (81 minutes 35
+seconds), or **4/5 cases correct**. Individual 256-token calls took about
+116.1-117.1 seconds. The larger image budget repaired all three scenarios that
+failed at 64 tokens, including the harder `sterile_zone_ambiguity` positive,
+but the first scissors crop in `all_present` became a false positive. At 16
+visual tokens, calls fell to 17.7 seconds but a controlled out-of-zone crop
+became a false negative.
+
+The resumable benchmark command was:
+
+```bash
+.venv/bin/python scripts/benchmark_centroid_vlm.py \
+  --image-tokens 256 \
+  --output tests/vlm_centroid_256_results.json \
+  --fresh
+```
+
+The `llama-server` process must use matching `--image-min-tokens 256` and
+`--image-max-tokens 256` flags. The committed
+`tests/vlm_centroid_256_results.json` records every crop verdict, box, and
+duration; the script writes after each segment and resumes an interrupted run
+unless `--fresh` is supplied.
 
 The practical conclusion is negative: centroid cropping improves observability
 and can recover the obvious `instrument_out_of_zone` case, but no tested token
-budget is both accurate and fast enough on the IQ9 CPU vision path. The 64-token
-profile is useful for reproducing the experiment and dashboard progress; it is
-not a validated sterile-zone classifier. The 256-token probes show that more
-local visual detail can repair the observed errors, but their performance is
-not operationally acceptable. Do not represent either profile as clinical or
+budget is both reliable and fast enough on the IQ9 CPU vision path. The
+64-token profile is useful for reproducing the experiment and dashboard
+progress; it is not a validated sterile-zone classifier. The full 256-token run
+shows a substantial accuracy improvement, but 4/5 cases and 81 minutes remain
+operationally unacceptable. Do not represent either profile as clinical or
 production acceptance.
 
 ## Troubleshooting

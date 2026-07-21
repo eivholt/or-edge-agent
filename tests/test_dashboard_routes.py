@@ -70,3 +70,22 @@ def test_pipeline_marks_agent_exception_as_failure(monkeypatch, tmp_path):
         "detail": "Agent error: model unavailable",
         "total_duration_ms": 4000,
     }
+
+
+def test_pipeline_clears_previous_run_component_state(monkeypatch, tmp_path):
+    scenario = tmp_path / "new_run.json"
+    scenario.write_text(
+        json.dumps({"case_id": "CASE-TEST", "room_id": "OR-2", "visible_items": {}})
+    )
+    server._last_states.clear()
+    server._last_states["vlm_local"] = {"component": "vlm_local"}
+
+    monkeypatch.setattr(
+        "apps.agent.run_fixture.ask_agent",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(RuntimeError("stop")),
+    )
+    monkeypatch.setattr(server, "_emit", lambda *_args, **_kwargs: None)
+
+    server._run_pipeline(str(scenario), cloud_connected=True)
+
+    assert server._last_states == {}

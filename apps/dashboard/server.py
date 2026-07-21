@@ -209,6 +209,7 @@ def _run_pipeline(scenario_path: str, cloud_connected: bool = True):
 
     from apps.agent.validation import validate_decision
 
+    _last_states.clear()
     pipeline_started = time.perf_counter()
 
     # 1. Load event

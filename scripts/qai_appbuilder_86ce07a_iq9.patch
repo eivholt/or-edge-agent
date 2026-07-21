@@ -1,0 +1,20 @@
+diff --git a/samples/genie/c++/Service/src/GenieAPIService/src/GenieAPIService.cpp b/samples/genie/c++/Service/src/GenieAPIService/src/GenieAPIService.cpp
+--- a/samples/genie/c++/Service/src/GenieAPIService/src/GenieAPIService.cpp
++++ b/samples/genie/c++/Service/src/GenieAPIService/src/GenieAPIService.cpp
+@@ -173,3 +173,3 @@ void GenieService::ServiceStart()
+-    static const std::string HOST = "0.0.0.0";
++    static const std::string HOST = "127.0.0.1";
+     My_Log{My_Log::Level::kAlways} << YELLOW << "[OK] Genie API Service IS Running." << RESET << std::endl;
+     My_Log{My_Log::Level::kAlways} << YELLOW << "[OK] Genie API Service -> http://"
+diff --git a/samples/genie/c++/Service/src/GenieAPIService/src/model/def.h b/samples/genie/c++/Service/src/GenieAPIService/src/model/def.h
+--- a/samples/genie/c++/Service/src/GenieAPIService/src/model/def.h
++++ b/samples/genie/c++/Service/src/GenieAPIService/src/model/def.h
+@@ -91,7 +91,7 @@ struct ModelType : public BaseEnum
+ namespace std
+ {
+     template<>
+-    struct std::hash<ModelType>
++    struct hash<ModelType>
+     {
+         size_t operator()(ModelType const &m) const noexcept { return std::hash<int>{}(int(m)); }
+     };

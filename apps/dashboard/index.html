@@ -774,7 +774,7 @@
               <div class="node-icon"></div>
               <div>
                 <div class="node-title">Remote VLM <span class="badge-external badge-cloud">Cloud</span></div>
-                <div class="node-subtitle" id="vlm-remote-subtitle">Cloud · Fallback</div>
+                <div class="node-subtitle" id="vlm-remote-subtitle">Cloud</div>
               </div>
             </div>
             <img id="vlm-remote-thumb" class="vlm-thumb" src="" alt="VLM input">
@@ -843,7 +843,7 @@ const detectorImageWrap = document.getElementById('detectorImageWrap');
 // ── Load runtime config ─────────────────────────────
 fetch('/api/config').then(r => r.json()).then(cfg => {
   const sub = document.getElementById('vlm-remote-subtitle');
-  if (sub && cfg.remote_vlm_model) sub.textContent = cfg.remote_vlm_model + ' · Cloud · Fallback';
+  if (sub && cfg.remote_vlm_model) sub.textContent = cfg.remote_vlm_model + ' · Cloud';
 }).catch(() => {});
 
 // ── SSE Connection ──────────────────────────────────
