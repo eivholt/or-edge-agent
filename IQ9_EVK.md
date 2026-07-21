@@ -1,24 +1,30 @@
 # Build An On-Device Surgical Logistics Agent On The IQ9
 
-This tutorial shows edge AI developers how to build and run a complete agentic
+**Author:** [Eivind Holt](https://www.linkedin.com/in/eivholt/), July 2026  
+**Repository:** [github.com/eivholt/or-edge-agent](https://github.com/eivholt/or-edge-agent)  
+**Target:** [Qualcomm Dragonwing IQ-9075 EVK / QCS9075 / Hexagon v73](https://www.qualcomm.com/developer/hardware/qualcomm-iq-9075-evaluation-kit-evk). Hardware generously sponsored by Qualcomm 
+**Model:** [mistralai/Ministral-3-3B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512) Q4_K_M GGUF running on device NPU
+
+This tutorial shows how to build and run a complete agentic
 application on a Qualcomm IQ9 IQ9075 evaluation kit. The application is a
 synthetic operating-room logistics demo: it observes a room prepared for
 surgery, compares the instruments it can see with a synthetic case record, and
 requests operational follow-up when supplies are missing or an instrument may
 be outside the sterile work area.
 
-No medical background is required. The **sterile drape** is the green covering
+![Prepared camera frame showing instruments on and beside a green sterile drape](resources/frame_sterile_zone_ambiguity.png)
+
+The **sterile drape** is the green covering
 that defines the clean work surface around a patient. An instrument beyond its
 boundary may need a person to review the scene. The **electronic medical
 record** in this demo is a local synthetic service that supplies the expected
-instrument list; it contains no real patient data. The application demonstrates
-logistics workflow only. It does not make diagnoses, recommend treatment, clear
-a surgical case, or act as a clinical alarm.
+instrument list. The application demonstrates
+logistics workflow.
 
 The architecture highlights three reusable edge-agent patterns:
 
-1. **Object detection for inventory.** An Edge Impulse FOMO model detects and
-  counts instruments before deterministic quantity reconciliation.
+1. **Object detection triggers agent.** An Edge Impulse FOMO model detects and
+  counts instruments before triggering agent reasoning.
 2. **One local multimodal large language model in two roles.** Ministral powers
    the tool-using agent through a text endpoint. The agent can also call a
   projector-backed Ministral endpoint to inspect detector-centered image
