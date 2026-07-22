@@ -49,6 +49,8 @@ matching runtime to the evaluation kit, and build the service that keeps the
 model loaded. They then assemble the application and verify the full
 detector-to-agent flow.
 
+![Dashboard](resources/20260722_134716.jpg)
+
 Versions used as of July 2026:
 
 - Ubuntu AArch64, kernel `6.8.0-1077-qcom`
