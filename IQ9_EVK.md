@@ -1,4 +1,4 @@
-# Build An On-Device Surgical Logistics Agent On The IQ9
+# Build An On-Device Surgical Logistics Agent On Qualcomm Dragonwing IQ-9075 EVK
 
 **Author:** [Eivind Holt](https://www.linkedin.com/in/eivholt/), July 2026  
 
@@ -9,42 +9,47 @@
 **Model:** [mistralai/Ministral-3-3B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512) Q4_K_M GGUF running on device NPU
 
 This tutorial shows how to build and run a complete agentic
-application on a Qualcomm IQ9 IQ9075 evaluation kit. The application is a
+application on a Qualcomm IQ9 IQ9075 evaluation kit, complete with a visual dashboard. The application is a
 synthetic operating-room logistics demo: it observes a room prepared for
 surgery, compares the instruments it can see with a synthetic case record, and
-requests operational follow-up when supplies are missing or an instrument may
+requests supply orders or human tasks when an instrument may
 be outside the sterile work area.
 
-<img alt="Prepared camera frame showing instruments on and beside a green sterile drape" src="resources/frame_sterile_zone_ambiguity.png" width="50%">
+![Dashboard](resources/segment-outside-zone02.png)
+
+Demo (YouTube):
+
+[![Dashboard demo - cloud VLM](https://img.youtube.com/vi/231SRW_yUvY/0.jpg)](https://www.youtube.com/watch?v=231SRW_yUvY)
 
 The **sterile drape** is the green covering
-that defines the clean work surface around a patient. An instrument beyond its
+that defines a clean work surface next to a patient in surgery. An instrument beyond its
 boundary may need a person to review the scene. The **electronic medical
 record** in this demo is a local synthetic service that supplies the expected
-instrument list. The application demonstrates
-logistics workflow.
+instrument list. The application demonstrates logistics workflow, using the correct tools/APIs with correct parameters, reasoning on results and acting accordingly.
+
+<img alt="Prepared camera frame showing instruments on and beside a green sterile drape" src="resources/frame_sterile_zone_ambiguity.png" width="50%">
 
 The architecture highlights three reusable edge-agent patterns:
 
 1. **Object detection triggers agent.** An Edge Impulse FOMO model detects and
-  counts instruments before triggering agent reasoning.
-2. **Separate language reasoning from visual inspection.** Local Ministral
-  powers the tool-using agent through a text endpoint. Visual inspection can
-  use projector-backed local Ministral on detector-centered image segments or
-  a cloud VLM on the full frame. The detector selects local context; only the
-  VLM classifies the support surface. Deterministic application code retains
-  the final workflow policy.
+  counts instruments before triggering the LLM-agent, supplying detected objects.
+2. **Use separate models for decisions and vision.** A local Ministral language
+  model decides which tools the agent should call. A vision model then examines
+  either small image regions around detected instruments or the complete image.
+  The vision model can run locally or in the cloud. The detector only chooses
+  which regions to inspect; it does not decide whether an instrument is outside
+  the sterile area. Application logic applies the final workflow rules.
 3. **A visual, on-device execution trace.** The dashboard shows the input image,
    detector results, case-record lookup, supply comparison, visual inspection,
-   tool actions, and final status light as the workflow runs on the device.
+   tool actions, and final status light, emulating a physical industrial stack light, as the workflow runs on the device.
 
-The sections below start with the official GGUF on an x86-64 Ubuntu workstation,
+The sections below start with the official Ministral model GGUF on an x86-64 Ubuntu workstation,
 compile it into Qualcomm AI Runtime context binaries, copy the export and its
 matching runtime to the evaluation kit, and build the service that keeps the
 model loaded. They then assemble the application and verify the full
-detector-to-agent path. No setup from another tutorial is assumed.
+detector-to-agent flow.
 
-The configuration below was validated on:
+Versions used as of July 2026:
 
 - Ubuntu AArch64, kernel `6.8.0-1077-qcom`
 - Python `3.12.3`
@@ -92,13 +97,15 @@ The configuration below was validated on:
   This application uses Ministral with its vision projector to inspect image
   segments selected by the detector.
 
+## Combining object detection with Visual Language Model
+An object detection model can efficiently classify and image and count the number of instances of objects of interest. However, it can't reason over placement of the objects. In this demo VLMs are used to further answer whether the detected objects are placed in a sterile zone, or if they have been moved to a potentially contaminated area and need to be replaced. The VLMs are only used if any objects are detected, the agent makes this decision based on object detection model output and available tools.
+
 ## Why Visual Inspection Can Run Locally Or Remotely
 
 The first version used one local multimodal Ministral model for visual
 inspection. On a workstation with an RTX 5090, the BF16 model processed the
 entire image in about 0.46 seconds and correctly identified the known
-out-of-zone instrument. An earlier end-to-end application run also passed all
-five scenarios three times. This made full-frame local inference the simplest
+out-of-zone instrument. This made full-frame local inference the simplest
 design: send one image to the VLM and let it inspect the complete scene.
 
 Moving that same idea to the IQ9075 evaluation kit exposed two problems. The
@@ -108,23 +115,31 @@ than through the HTP text-model path. Full-frame requests took 446 seconds at
 the known positive scene. The small local model was therefore both too slow and
 too unreliable for this spatial judgment on the evaluation kit.
 
-We then used the fast FOMO detector as a visual gate. Instead of asking the VLM
+![100% EVK utilization](resources/vlm-benchmark-utilization1.png)
+
+The next attempt used the fast FOMO detector as a visual gate. Instead of asking the VLM
 to search the entire frame, the application creates a square crop around each
 detected instrument's centroid, preserving enough of the surrounding surface
-to show whether that instrument is on the green drape or exposed metal. Each
+to show whether that instrument is on the green drape or if any part is outside. Each
 crop receives a constrained boolean question, and the scene is positive when
 any crop is positive. This is a reusable edge pattern: use a small detector to
 find relevant regions, then spend VLM compute only on those regions. Detector
-geometry selects the evidence; it never decides the sterile-zone verdict.
+geometry selects the input candidate; it never decides the sterile-zone verdict.
+
+![Edge Impulse object detector output with eight labeled instruments](resources/instrument-out-of-zone-02-object-detection.png) ![Local Ministral visual inspector showing seven inside segments and one outside segment](resources/instrument-out-of-zone-05-visual-inspection.png)
 
 The crop experiment demonstrated that the extra local detail can recover the
 needed decisions, but not at a practical speed. At 64 visual tokens, all 42
 crops across five scenarios completed in 27 minutes, but only two scenarios
 were correct. The complete 256-token run corrected those three failures but
-introduced a false positive in `all_present`, finishing **4/5 cases correct**.
+introduced a false positive in test case `all_present`, finishing **4/5 cases correct**.
 Its 42 serial crops took 4,895 seconds (81 minutes 35 seconds), or about 14-21
 minutes per case. Slicing can supply more useful visual evidence, but this local
 implementation remains too slow and inconsistent for an operational workflow.
+
+Local VLM demo (YouTube):
+
+[![Dashboard demo - cloud VLM](https://img.youtube.com/vi/mv9Yxe_LFpQ/0.jpg)](https://www.youtube.com/watch?v=mv9Yxe_LFpQ)
 
 For that reason, the application now supports a cloud VLM for visual inspection.
 The dashboard's cloud option sends the full image and the same fixed question to
@@ -160,7 +175,7 @@ conda activate qairt-dev-gguf
 python -m pip install "qairt-dev==0.8.1" "huggingface_hub[cli]==0.36.2"
 ```
 
-`qairt-dev` is distributed through Qualcomm's package channel and may require
+`qairt-dev` is distributed through Qualcomm's package channel and requires
 the access credentials associated with the Qualcomm developer account. Let its
 version manager install the host dependencies and fetch the exact SDK:
 
@@ -242,22 +257,6 @@ grep -q QnnHtp "$GENIE/genie_config.json"
 test "$(stat -c %s "$GENIE/artifacts/split_model_1.bin")" -gt 1000000000
 test "$(stat -c %s "$GENIE/artifacts/split_model_2.bin")" -gt 1000000000
 du -sh "$GENIE"
-```
-
-The exact context hashes are useful only when checking the validated build;
-QAIRT may produce different binaries on another supported build:
-
-```bash
-sha256sum \
-  "$GENIE/artifacts/split_model_1.bin" \
-  "$GENIE/artifacts/split_model_2.bin" \
-  "$GENIE/artifacts/tokenizer.json"
-```
-
-```text
-split_model_1.bin  4f90da6bb305a3e8e52151101b99a0b45f8fff035f81dbcc2d8b3350ab2d0a09
-split_model_2.bin  67b16bb7389736c519d15859558cbb027365a12020754cb2e351cf91f23d6a23
-tokenizer.json     53136e49a780a9198214b29ec47305ba0f60031463d9fcfa275b0325d18c1a57
 ```
 
 ## Install The Matching Runtime On The Evaluation Kit
