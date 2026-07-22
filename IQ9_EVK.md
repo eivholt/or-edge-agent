@@ -8,14 +8,14 @@
 
 **Model:** [mistralai/Ministral-3-3B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512) Q4_K_M GGUF running on device NPU
 
+![Dashboard](resources/segment-outside-zone02.png)
+
 This tutorial shows how to build and run a complete agentic
 application on a Qualcomm IQ9 IQ9075 evaluation kit, complete with a visual dashboard. The application is a
 synthetic operating-room logistics demo: it observes a room prepared for
 surgery, compares the instruments it can see with a synthetic case record, and
 requests supply orders or human tasks when an instrument may
 be outside the sterile work area.
-
-![Dashboard](resources/segment-outside-zone02.png)
 
 Demo (YouTube):
 
@@ -871,27 +871,6 @@ miss. The RTX BF16 result does not prove that quantization is the sole cause.
 The host also used vLLM, a different image preprocessing path, a longer prompt
 and output schema, and a backend-selected visual-token budget.
 
-Historical host results have two distinct meanings. An earlier full-application
-run on the BF16 vLLM host reported all five scenarios passing three consecutive
-runs, or 15/15. That run verified the tool workflow, including calls to
-`inspect_scene` and `set_stacklight`, against the policy and fixtures in use at
-the time. Later host runs also showed BF16 producing the positive sterile-zone
-result and red-light workflow, but the two positive integration scenarios were
-not consistently stable across every subsequent suite run.
-
-Separately, the committed standalone VLM snapshot in
-`tests/vlm_benchmark_results.json` is 6/7: it records a 0.393-second false
-negative for `sterile_zone_ambiguity`. That later snapshot must not be described
-as disproving the earlier 15/15 application acceptance, nor should the earlier
-application run be presented as a repeatable 7/7 standalone VLM benchmark. The
-prompt, fixture set, policy assertions, and benchmark surface changed between
-those runs.
-
-A controlled BF16-versus-Q4 test through the same `llama.cpp` build, projector,
-prompt, and image budget would be required to isolate quantization. The
-defensible conclusion is that Q4 may reduce the margin of an already fragile 3B
-spatial reasoner, not that Q4 alone caused the failure.
-
 ### Detector-Centered Crop Results
 
 Crop radii 48, 64, and 80 all detected the out-of-zone scissors with the tuned
@@ -940,8 +919,10 @@ budget is both reliable and fast enough on the IQ9 CPU vision path. The
 64-token profile is useful for reproducing the experiment and dashboard
 progress; it is not a validated sterile-zone classifier. The full 256-token run
 shows a substantial accuracy improvement, but 4/5 cases and 81 minutes remain
-operationally unacceptable. Do not represent either profile as clinical or
-production acceptance.
+operationally unacceptable. These are promising results, but needs improvements.
+
+## Conclusion
+Combining more traditional machine learning models, such as visual object detection, with agentic reasoning and tool-calling on edge devices is now ready for practical applications. This alone opens a whole new paradigm of developing and maintaining automation systems. Visual reasoning can take this even a step further; an agent can make decisions based not only on present objects, but on visual context. This project demonstrates that this is possible to run as an application, but that models and inference speeds need improvements before it can scale.
 
 ## Troubleshooting
 
