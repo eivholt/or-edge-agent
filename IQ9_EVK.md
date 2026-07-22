@@ -154,6 +154,141 @@ provided the visual-inspection adapter sends the image and returns the same
 boolean verdict contract. The later performance section records the complete
 measurements and their limitations.
 
+## How The Agent Works
+
+The agent is built with [Pydantic AI](https://ai.pydantic.dev/). It is not a
+single prompt that asks a language model to invent an answer. Instead, the
+language model runs in a loop where it can call a small registry of Python
+tools, receive their results, and decide what to do next. The loop ends only
+when the model returns a final text summary and the application confirms that
+all required actions were completed.
+
+Prompt:
+
+```
+You are a local OR logistics agent (synthetic demo). Coordinate supply and review workflows. Never diagnose or prescribe.
+
+WORKFLOW — always follow this order:
+1. Call get_case(case_id) to fetch the EMR case and required equipment.
+2. Call check_supplies() to compare detected items against requirements.
+3. Call inspect_scene to check the sterile zone (see its docstring for when to call).
+   The image_path MUST be taken from the event's "image_path" field — do NOT invent a path.
+4. Now take ALL applicable actions together:
+   a) Call set_stacklight:
+      - set red if inspect_scene verdict is true (sterile zone issue).
+      - set yellow if check_supplies shows deficits.
+      - set green ONLY when: no sterile issue AND no deficits.
+   b) If inspect_scene verdict is true → call create_task(human_review) for the sterile zone issue.
+   c) Deficit items → call request_resupply for each one. That is all — move on.
+
+ACTION MAPPING (use exactly the right tool for each situation):
+- deficit item              → request_resupply (the ONLY correct tool for deficits)
+- sterile zone verdict=true → create_task
+
+RULES:
+- Do NOT create tasks for deficit items. Only use request_resupply for deficits.
+- Every run MUST include exactly one set_stacklight call.
+- Never ask the user for input. Always decide and act autonomously.
+- Your final text response must be a SHORT summary (2-4 sentences max).
+```
+
+### What The Model Receives
+
+Each run combines three sources of information:
+
+1. **Workflow instructions.** The main prompt in
+   `apps/agent/run_fixture.py` tells the model to fetch the case, compare
+   supplies, inspect the scene when instruments are visible, take every
+   applicable action, and finish with a short summary. It also states the key
+   rules: supply deficits use `request_resupply`, sterile-zone issues use one
+   `human_review` task, and every run sets exactly one status light.
+2. **The current event.** The user message is JSON containing the synthetic
+   `case_id`, `room_id`, image path, and instrument counts produced by Edge
+   Impulse. It also includes the available operational resources. Expected
+   answers and detector hints are not included.
+3. **Tool definitions.** Pydantic AI converts each registered Python
+   function's name, type annotations, arguments, and docstring into a tool
+   schema the model can see. The model therefore knows which tools exist, what
+   each tool does, and which arguments it must supply.
+
+The text model runs with temperature `0` to reduce variation. Tool results are
+added to the conversation automatically, so each new model request includes
+the evidence gathered in earlier steps.
+
+### The Tool Registry
+
+The application registers six native tools with the agent:
+
+| Tool | Responsibility |
+| --- | --- |
+| `get_case` | Fetch the synthetic case and required instrument counts from the case-record API. |
+| `check_supplies` | Compare required counts with Edge Impulse counts using deterministic Python code. |
+| `inspect_scene` | Ask either the local or cloud VLM whether a detected instrument is outside the sterile area. |
+| `request_resupply` | Record one supply request for each missing instrument type. |
+| `create_task` | Create a `human_review` task when the visual verdict reports a sterile-zone issue. |
+| `set_stacklight` | Set one final green, yellow, or red room-status light. |
+
+These are ordinary Python functions decorated with `@or_agent.tool`; they are
+not separate MCP servers in the current execution path. Pydantic AI invokes the
+selected function, then returns its structured result to the model. A shared
+`AgentDeps` object carries state across calls, including the fetched case,
+supply deficits, visual verdict, completed resupply requests, review-task count,
+and selected light. It also emits progress events to the dashboard.
+
+### One Agent Run
+
+```mermaid
+sequenceDiagram
+    participant D as Edge Impulse detector
+    participant A as Ministral agent
+    participant T as Python tools
+    participant V as Vision model
+    participant P as Policy checks
+
+    D->>A: Event JSON with case, room, image, and counts
+    A->>T: get_case(case_id)
+    T-->>A: Required instrument counts
+    A->>T: check_supplies()
+    T-->>A: Exact quantity deficits
+    A->>T: inspect_scene(image_path)
+    T->>V: Image or detector-centered crops
+    V-->>T: Boolean sterile-zone verdict
+    T-->>A: Structured inspection result
+    A->>T: Applicable resupply, review, and light actions
+    A->>P: Final summary
+    P-->>A: Accept or request missing actions
+```
+
+The model chooses the next tool from the evidence available at that point. It
+may require several model requests to complete one run. Pydantic AI preserves
+the ordered tool calls and results, and the dashboard displays this trace as it
+happens.
+
+### What Is Enforced In Code
+
+The language model coordinates the workflow, but safety-critical workflow
+rules do not depend on prompt compliance alone:
+
+- Supply reconciliation is pure Python in `apps/agent/reconcile.py`; the model
+  does not calculate the deficits itself.
+- `set_stacklight` recomputes the required color from recorded state: red for a
+  positive sterile-zone verdict, otherwise yellow for deficits, otherwise
+  green. If the model requests another color, the tool replaces it.
+- Duplicate resupply requests, review tasks, and light changes are ignored.
+- Before accepting the final response, the Pydantic AI output validator checks
+  that the case and supplies were inspected, every deficit was requested,
+  visual inspection ran when required, one review task exists for a positive
+  visual verdict, and exactly one correct light was set. If anything is
+  missing, `ModelRetry` tells the model which action remains and the loop
+  continues without repeating successful tools.
+- After the run, `apps/agent/validation.py` checks the recorded trace against
+  the allowed tool names and argument values before the dashboard reports
+  success.
+
+This division is deliberate: the LLM handles sequencing and tool selection;
+the detector, VLM, case API, and reconciliation code provide evidence; and
+deterministic Python code enforces the final operational policy.
+
 ## Prepare The Export Workstation
 
 Model compilation runs on an x86-64 Ubuntu workstation, not on the evaluation
