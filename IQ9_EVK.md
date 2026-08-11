@@ -6,7 +6,9 @@
 
 **Target:** [Qualcomm Dragonwing IQ-9075 EVK / QCS9075 / Hexagon v73](https://www.qualcomm.com/developer/hardware/qualcomm-iq-9075-evaluation-kit-evk). Hardware generously sponsored by Qualcomm
 
-**Model:** [mistralai/Ministral-3-3B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512) Q4_K_M GGUF running on device NPU
+**VLM Model:** [mistralai/Ministral-3-3B-Instruct-2512](https://huggingface.co/mistralai/Ministral-3-3B-Instruct-2512) Q4_K_M GGUF running on device NPU
+
+**Object Detection Model** [Surgery Inventory Synthetic](https://docs.edgeimpulse.com/projects/expert-network/surgery-inventory-synthetic-data)
 
 ![Dashboard](resources/segment-outside-zone02.png)
 
@@ -31,7 +33,7 @@ instrument list. The application demonstrates logistics workflow, using the corr
 
 The architecture highlights three reusable edge-agent patterns:
 
-1. **Object detection triggers agent.** An Edge Impulse FOMO model detects and
+1. **Object detection triggers agent.** An [Edge Impulse FOMO model](https://docs.edgeimpulse.com/studio/projects/learning-blocks/blocks/object-detection/fomo) detects and
   counts instruments before triggering the LLM-agent, supplying detected objects.
 2. **Use separate models for decisions and vision.** A local Ministral language
   model decides which tools the agent should call. A vision model then examines
@@ -71,8 +73,8 @@ Versions used as of July 2026:
 - **EVK (evaluation kit):** A development board for evaluating a processor
   before integrating it into a product. The target here is the Qualcomm
   Dragonwing IQ-9075 EVK.
-- **FOMO (Faster Objects, More Objects):** Edge Impulse's lightweight object
-  detector. It predicts object classes and centroids on a grid, which is enough
+- **FOMO (Faster Objects, More Objects):** [Edge Impulse's lightweight object
+  detector](https://docs.edgeimpulse.com/studio/projects/learning-blocks/blocks/object-detection/fomo). It predicts object classes and centroids on a grid, which is enough
   for this application to count instruments and select image regions.
 - **Genie:** Qualcomm's generative-AI runtime and API for executing language
   models compiled for Qualcomm hardware.
@@ -102,6 +104,9 @@ Versions used as of July 2026:
 ## Combining object detection with Visual Language Model
 An object detection model can efficiently classify and image and count the number of instances of objects of interest. However, it can't reason over placement of the objects. In this demo VLMs are used to further answer whether the detected objects are placed in a sterile zone, or if they have been moved to a potentially contaminated area and need to be replaced. The VLMs are only used if any objects are detected, the agent makes this decision based on object detection model output and available tools.
 
+## Object Detection
+The object detection model used in this demo was created using Edge Impulse Studio and trained on synthetic data, read more about how it was created [Surgery Inventory Object Detection](https://docs.edgeimpulse.com/projects/expert-network/surgery-inventory-synthetic-data).
+
 ## Why Visual Inspection Can Run Locally Or Remotely
 
 The first version used one local multimodal Ministral model for visual
@@ -119,7 +124,7 @@ too unreliable for this spatial judgment on the evaluation kit.
 
 ![100% EVK utilization](resources/vlm-benchmark-utilization1.png)
 
-The next attempt used the fast FOMO detector as a visual gate. Instead of asking the VLM
+The next attempt used the fast [FOMO detector](https://docs.edgeimpulse.com/studio/projects/learning-blocks/blocks/object-detection/fomo) as a visual gate. Instead of asking the VLM
 to search the entire frame, the application creates a square crop around each
 detected instrument's centroid, preserving enough of the surrounding surface
 to show whether that instrument is on the green drape or if any part is outside. Each
