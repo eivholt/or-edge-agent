@@ -1,4 +1,4 @@
-# Build An On-Device Surgical Logistics Agent On Qualcomm Dragonwing IQ-9075 EVK
+# Combining Object Detection and VLM for an on-device AI Agent On Qualcomm Dragonwing IQ-9075 EVK
 
 **Author:** [Eivind Holt](https://www.linkedin.com/in/eivholt/), July 2026  
 
